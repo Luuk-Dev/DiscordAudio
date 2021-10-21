@@ -1,0 +1,62 @@
+{
+  "name": "discordaudio",
+  "version": "2.2.1",
+  "description": "Play audio easily in a voice channel for your Discord.js bot. Easy documentations and easy to use.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Luuk",
+  "license": "MIT",
+  "dependencies": {
+    "@discordjs/opus": "^0.6.0",
+    "@discordjs/voice": "^0.6.0",
+    "discord-ytdl-core": "^5.0.4",
+    "events": "^3.3.0",
+    "ffmpeg": "^0.0.4",
+    "ffmpeg-static": "^4.4.0",
+    "libsodium-wrappers": "^0.7.9",
+    "opusscript": "^0.0.8",
+    "ytdl-core": "^4.9.1"
+  },
+  "keywords": [
+    "audio",
+    "discord",
+    "music",
+    "stream",
+    "youtube",
+    "player",
+    "voice",
+    "channel",
+    "voicechannel",
+    "broadcast",
+    "connection",
+    "bot",
+    "discord.js",
+    "connections",
+    "players",
+    "broadcasts",
+    "framework",
+    "adapter",
+    "audiomanager",
+    "manager"
+  ],
+  "readme": "readme.MD",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Luuk-Dev/DiscordAudio"
+  },
+  "bugs": {
+    "url": "https://github.com/Luuk-Dev/DiscordAudio/issues"
+  },
+  "publisher": "Luuk",
+  "homepage": "https://zyno-studio.gitbook.io/discord-audio",
+  "categories": [
+    "Other"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/@Luuk-Dev"
+  },
+  "types": "index.d.ts",
+  "displayName": "Discord Audio"
+}
