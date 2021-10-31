@@ -126,6 +126,7 @@ class AudioManager extends EventEmitter{
     return new Promise((resolve, reject) => {
       if(globals[channel.id].get(`loop`) === 0){
         queue.shift();
+        if(queue.length === 0) return this.stop(channel);
         player.play(queue[0].url, {
           quality: queue[0].quality,
           autoleave: false,
