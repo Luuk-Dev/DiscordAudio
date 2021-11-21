@@ -1,6 +1,7 @@
 const voice = require('@discordjs/voice');
 const {createAdapter} = require('../adapter.js');
-const ytdl = require('discord-ytdl-core');
+const ytdl = require('ytdl-core');
+const play = require('play-dl');
 const EventEmitter = require('events');
 const constants = require('../util/constants.js');
 
@@ -85,7 +86,10 @@ class Player extends EventEmitter {
                 if(typeof options.autoleave === 'boolean') settings['autoleave'] = Boolean(options.autoleave);
                 if(typeof options.selfDeaf === 'boolean') settings['selfDeaf'] = Boolean(options.selfDeaf);
                 if(typeof options.selfMute === 'boolean') settings['selfMute'] = Boolean(options.selfMute);
-                if(typeof options.quality === 'string') settings['quality'] = options.quality.toLowerCase() === 'high' ? options.quality : 'low';
+                if(typeof options.quality === 'string'){
+                    var qu = options.quality.toLowerCase() === 'high' ? 1000 : 0;
+                    settings['quality'] = qu;
+                }
                 if(typeof options.audiotype === 'string') settings['audiotype'] = options.audiotype.toLowerCase();
                 if(typeof options.volume === 'number'){
                     if(options.volume > 1 || options.volume < 0) throw new Error(constants.ERRORMESSAGES.VOLUME_MAX);
@@ -118,19 +122,13 @@ class Player extends EventEmitter {
                 if(globals[this.channel.id].get(`resource`)) globals[this.channel.id].get(`resource`).playStream.destroy();
                 globals[this.channel.id].set(`resource`, resource);
             } else {
-                ytdl.getInfo(audiostream).then(info => {
-                    const download = ytdl.downloadFromInfo(info, {
-                        quality: (settings.quality === 'high' ? 'highestaudio' : 'lowestaudio'),
-                        filter: 'audioonly',
-                        highWaterMark: 1048576 * 32
-                    });
-                    download.on('error', error => {
-                        this.playing = false;
-                        reject(new Error(`${constants.ERRORMESSAGES.YOUTUBE_STREAM_FAILED} ${error}`));
-                        return;
-                    });
-                    const resource = voice.createAudioResource(download, {
-                        inputType: settings.audiotype,
+                const vidID = ytdl.getURLVideoID(audiostream);
+                const yturl = `https://www.youtube.com/watch?v=${vidID}`;
+                play.stream(yturl, {
+                    quality: settings.quality
+                }).then(playable_stream => {
+                    const resource = voice.createAudioResource(playable_stream.stream, {
+                        inputType: playable_stream.type,
                         inlineVolume: true
                     });
                     resource.playStream.on('end', () => {
@@ -144,8 +142,9 @@ class Player extends EventEmitter {
                     if(globals[this.channel.id].get(`resource`)) globals[this.channel.id].get(`resource`).playStream.destroy();
                     globals[this.channel.id].set(`resource`, resource);
                 }).catch(err => {
-                    this.playing = false;
-                    reject(new Error(`${constants.ERRORMESSAGES.YOUTUBE_INFO_FAILED} ${err}`));
+                    console.log(err);
+                    reject(new Error(constants.ERRORMESSAGES.YOUTUBE_STREAM_FAILED));
+                    return;
                 });
             }
             if(!globals[this.channel.id].get(`connection`) || this.connected === false){
