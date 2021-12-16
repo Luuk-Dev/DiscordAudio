@@ -1,6 +1,6 @@
 const voice = require('@discordjs/voice');
 const EventEmitter = require('events');
-const {createAdapter} = require('../adapter.js');
+const { createAdapter } = require('../adapter.js');
 const constants = require('../util/constants.js');
 
 function connect(connection){
@@ -148,7 +148,7 @@ class Connection extends EventEmitter {
 
             globals[this.channel.id].set(`broadcast`, broadcast);
             connect(globals[this.channel.id].get(`connection`)).then(() => {
-                const map = broadcast._getMap();
+                const map = broadcast._getValueSaver();
                 globals[this.channel.id].set(`subscription`, globals[this.channel.id].get(`connection`).subscribe(map.get(`player`)));
                 this.type = 'broadcast';
                 this.emit(constants.EVENTS.CONNECTION_BROADCAST_SUBSCRIBE);
