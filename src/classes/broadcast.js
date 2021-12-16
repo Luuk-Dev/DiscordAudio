@@ -85,7 +85,7 @@ class Broadcast extends EventEmitter{
      * Passes the globals map
      * @private
      */
-    _getMap(){
+    _getValueSaver(){
         return globals[this.id];
     }
     /**
