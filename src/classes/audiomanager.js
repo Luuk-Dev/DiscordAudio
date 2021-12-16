@@ -1,7 +1,7 @@
-const {Player} = require('./player.js');
+const { Player } = require('./player.js');
 const EventEmitter = require('events');
 const constants = require('../util/constants.js');
-const ytdl = require('ytdl-core');
+const ytstream = require('yt-stream');
 
 var globals = {};
 
@@ -12,7 +12,7 @@ class AudioManager extends EventEmitter{
   play(channel, stream, options){
     if(!channel || !stream) throw new Error(constants.ERRORMESSAGES.AM_REQUIRED_PARAMETERS);
     if(typeof channel !== 'object') throw new Error(constants.ERRORMESSAGES.INVALID_CHANNEL_PARAMETER);
-    if(typeof stream !== 'string') throw new Error(constants.ERRORMESSAGES.INVALID_STREAM_PARAMETER);
+    if(typeof stream === 'undefined' || stream === undefined || stream === '') throw new Error(constants.ERRORMESSAGES.INVALID_STREAM_PARAMETER);
 
     const settings = {
       quality: 'high',
@@ -25,18 +25,18 @@ class AudioManager extends EventEmitter{
       if(typeof options.audiotype === 'string') settings['audiotype'] = options.audiotype;
       if(typeof options.volume === 'number') settings['volume'] = options.volume;
     }
-    const yturl = ytdl.validateURL(stream);
+    const yturl = ytstream.validateURL(stream);
 
     return new Promise((resolve, reject) => {
       if(globals[channel.id]){
         const queue = globals[channel.id].get(`queue`);
         if(yturl === true){
-            ytdl.getInfo(stream).then(ytdlinfo => {
-                queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], ytdlinfo: ytdlinfo, volume: settings['volume']});
+            ytstream.getInfo(stream).then(info => {
+                queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume']});
             }).catch(() => {
-                queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], ytdlinfo: undefined, volume: settings['volume']});
+                queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
             });
-        } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], ytdlinfo: undefined, volume: settings['volume']});
+        } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
         this.emit(constants.EVENTS.AM_QUEUE_ADD, stream);
         resolve(true);
       } else {
@@ -49,12 +49,12 @@ class AudioManager extends EventEmitter{
         const player = new Player(channel);
         
         if(yturl === true){
-            ytdl.getInfo(stream).then(ytdlinfo => {
-                queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], ytdlinfo: ytdlinfo, volume: settings['volume']});
+            ytstream.getInfo(stream).then(info => {
+                queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume']});
             }).catch(() => {
-                queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], ytdlinfo: undefined, volume: settings['volume']});
+                queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
             });
-        } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], ytdlinfo: undefined, volume: settings['volume']});
+        } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
 
         player.play(stream, {
           autoleave: false,
@@ -184,7 +184,7 @@ class AudioManager extends EventEmitter{
     if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
     const queue = globals[channel.id].get(`queue`);
     const audioqueue = queue.reduce((total, item) => {
-        var title = item.ytdlinfo ? item.ytdlinfo.videoDetails.title : null;
+        var title = item.info ? item.info.title : null;
         total.push({url: item.url, title: title});
         return total;
     }, []);
