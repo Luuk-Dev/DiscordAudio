@@ -126,7 +126,7 @@ class Player extends EventEmitter {
                 ytstream.stream(yturl, {
                     quality: settings.quality
                 }).then(playable_stream => {
-                    const resource = voice.createAudioResource(playable_stream.stream, {
+                    const resource = voice.createAudioResource(playable_stream.url, {
                         inputType: playable_stream.type,
                         inlineVolume: true
                     });
@@ -141,7 +141,6 @@ class Player extends EventEmitter {
                     if(globals[this.channel.id].get(`resource`)) globals[this.channel.id].get(`resource`).playStream.destroy();
                     globals[this.channel.id].set(`resource`, resource);
                 }).catch(err => {
-                    console.log(err);
                     reject(new Error(constants.ERRORMESSAGES.YOUTUBE_STREAM_FAILED));
                     return;
                 });
