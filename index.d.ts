@@ -50,17 +50,17 @@ interface ConnectionEvents {
     play: [string];
     disconnect: [string];
     destroy: [string];
-    subscribe: [];
-    unsubscribe: [];
+    subscribe: [void];
+    unsubscribe: [void];
 };
 
 interface AudioManagerEvents {
     play: [VoiceChannel, StreamTypes];
     queue_add: [StreamTypes];
     queue_remove: [StreamTypes];
-    end: [];
+    end: [void];
     error: [Error];
-    destroy: [];
+    destroy: [void];
     connection_destroy: [VoiceChannel];
 };
 
@@ -172,10 +172,10 @@ export declare class Broadcast{
      */
     constructor(stream: StreamTypes, options: StreamBroadcastOptions);
     /**
-     * Passes the globals map
+     * Passes the globals ValueSaver
      * @private
      */
-     private _getMap();
+     private _getValueSaver();
      /**
      * Pauses the stream
      * @example
@@ -241,7 +241,7 @@ export declare class Connection{
      * .then(() => console.log(`Successfully started playing the broadcast`))
      * .catch(console.error);
      */
-    subscribe(broadcast: Broadcast) : Promise;
+    subscribe(broadcast: Broadcast) : Promise<void>;
     /**
      * Unsubscribes to an broadcast.
      * @example
@@ -348,7 +348,7 @@ export declare class AudioManager{
      * @example
      * audioManager.skip(<channel>);
      */
-    skip(channel: VoiceChannel) : Promise;
+    skip(channel: VoiceChannel) : Promise<void>;
     /**
      * Shows the full queue
      * @param {object} channel The voice channel where you want to get the queue of
@@ -371,7 +371,7 @@ export declare class AudioManager{
      * @example
      * await audioManager.deletequeue(<channel>, `https://somecoolsite.com/somestream.mp3`);
      */
-    deletequeue(channel: VoiceChannel, stream: StreamTypes) : Promise;
+    deletequeue(channel: VoiceChannel, stream: StreamTypes) : Promise<void>;
     /**
      * Destroys all players
      * @example
