@@ -31,19 +31,19 @@ type StreamAudioManagerOptions = {
     volume: number;
     quality: QualityOptions;
     audiotype: AudioTypeOptions;
-}
+};
 
 interface PlayerEvents {
     play: [string];
     stop: [string];
     destroy: [string];
     disconnect: [string];
-};
+}
 
 interface BroadcastEvents {
     play: [string];
     end: [string];
-};
+}
 
 interface ConnectionEvents {
     end: [string];
@@ -52,7 +52,7 @@ interface ConnectionEvents {
     destroy: [string];
     subscribe: [void];
     unsubscribe: [void];
-};
+}
 
 interface AudioManagerEvents {
     play: [VoiceChannel, StreamTypes];
@@ -62,7 +62,7 @@ interface AudioManagerEvents {
     error: [Error];
     destroy: [void];
     connection_destroy: [VoiceChannel];
-};
+}
 
 type ConnectionOptions = {
     selfDeaf: boolean;
