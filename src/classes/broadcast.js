@@ -1,5 +1,6 @@
 const voice = require('@discordjs/voice');
 const EventEmitter = require('events');
+const { ValueSaver } = require('valuesaver');
 const constants = require('../util/constants.js');
 
 const globals = {};
@@ -32,7 +33,7 @@ class Broadcast extends EventEmitter{
 
         const id = custom();
         this.id = id;
-        globals[id] = new Map();
+        globals[id] = new ValueSaver();
 
         globals[id].set(`stream`, stream);
 
@@ -82,7 +83,7 @@ class Broadcast extends EventEmitter{
         globals[id].get(`player`).pause();
     }
     /**
-     * Passes the globals map
+     * Passes the globals ValueSaver
      * @private
      */
     _getValueSaver(){
