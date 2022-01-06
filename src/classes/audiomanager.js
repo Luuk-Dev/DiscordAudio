@@ -2,6 +2,7 @@ const { Player } = require('./player.js');
 const EventEmitter = require('events');
 const constants = require('../util/constants.js');
 const ytstream = require('yt-stream');
+const { ValueSaver } = require('valuesaver');
 
 var globals = {};
 
@@ -40,7 +41,7 @@ class AudioManager extends EventEmitter{
         this.emit(constants.EVENTS.AM_QUEUE_ADD, stream);
         resolve(true);
       } else {
-        globals[channel.id] = new Map();
+        globals[channel.id] = new ValueSaver();
         globals[channel.id].set(`queue`, []);
         globals[channel.id].set(`loop`, 0);
 
