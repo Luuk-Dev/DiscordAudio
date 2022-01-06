@@ -3,6 +3,7 @@ const { createAdapter } = require('../adapter.js');
 const ytstream = require('yt-stream');
 const EventEmitter = require('events');
 const constants = require('../util/constants.js');
+const { ValueSaver } = require('valuesaver');
 
 const wait = (ms) => {
   return new Promise((resolve, reject) => {
@@ -45,7 +46,7 @@ class Player extends EventEmitter {
             }
         });
 
-        globals[this.channel.id] = new Map();
+        globals[this.channel.id] = new ValueSaver();
         globals[this.channel.id].set(`player`, player);
         
     }
