@@ -1,5 +1,6 @@
 const voice = require('@discordjs/voice');
 const EventEmitter = require('events');
+const { ValueSaver } = require('valuesaver');
 const { createAdapter } = require('../adapter.js');
 const constants = require('../util/constants.js');
 
@@ -33,7 +34,7 @@ class Connection extends EventEmitter {
         super();
 
         this.channel = channel;
-        globals[this.channel.id] = new Map();
+        globals[this.channel.id] = new ValueSaver();
 
         const settings = {
             selfDeaf: true,
@@ -148,8 +149,8 @@ class Connection extends EventEmitter {
 
             globals[this.channel.id].set(`broadcast`, broadcast);
             connect(globals[this.channel.id].get(`connection`)).then(() => {
-                const map = broadcast._getValueSaver();
-                globals[this.channel.id].set(`subscription`, globals[this.channel.id].get(`connection`).subscribe(map.get(`player`)));
+                const vs = broadcast._getValueSaver();
+                globals[this.channel.id].set(`subscription`, globals[this.channel.id].get(`connection`).subscribe(vs.get(`player`)));
                 this.type = 'broadcast';
                 this.emit(constants.EVENTS.CONNECTION_BROADCAST_SUBSCRIBE);
                 globals[this.channel.id].get(`connection`).on(voice.VoiceConnectionStatus.Disconnected, () => {
