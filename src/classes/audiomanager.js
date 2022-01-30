@@ -103,14 +103,14 @@ class AudioManager extends EventEmitter{
   loop(channel, loop){
     if(!channel || !loop) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETERS_LOOP);
     if(isNaN(loop)) throw new Error(constants.ERRORMESSAGES.LOOP_PARAMETER_NAN);
-    if(loop < 0 || loop > 2) throw new Error(constants.ERRORMESSAGES.LOOP_PARAMETER_INVALID);
+    if(loop < 1 || loop > 3) throw new Error(constants.ERRORMESSAGES.LOOP_PARAMETER_INVALID);
     if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
     globals[channel.id].set(`loop`, loop);
   };
   looptypes = {
-    off: 0,
-    loop: 1,
-    queueloop: 2
+    off: 1,
+    loop: 2,
+    queueloop: 3
   };
   stop(channel){
     if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
