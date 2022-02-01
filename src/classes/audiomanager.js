@@ -101,7 +101,7 @@ class AudioManager extends EventEmitter{
     });
   };
   loop(channel, loop){
-    if(!channel || !loop) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETERS_LOOP);
+    if(!channel || typeof loop !== 'number') throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETERS_LOOP);
     if(isNaN(loop)) throw new Error(constants.ERRORMESSAGES.LOOP_PARAMETER_NAN);
     if(loop < 0 || loop > 2) throw new Error(constants.ERRORMESSAGES.LOOP_PARAMETER_INVALID);
     if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
