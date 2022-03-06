@@ -2,6 +2,7 @@ const { Player } = require('./player.js');
 const EventEmitter = require('events');
 const constants = require('../util/constants.js');
 const ytstream = require('yt-stream');
+const playdl = require('play-dl');
 const { ValueSaver } = require('valuesaver');
 
 var globals = {};
@@ -32,10 +33,10 @@ class AudioManager extends EventEmitter{
       if(globals[channel.id]){
         const queue = globals[channel.id].get(`queue`);
         if(yturl === true){
-            ytstream.getInfo(stream).then(info => {
-                queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume']});
+            playdl.video_basic_info(stream).then(info => {
+              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info.video_details, volume: settings['volume']});
             }).catch(() => {
-                queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
+              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
             });
         } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
         this.emit(constants.EVENTS.AM_QUEUE_ADD, stream);
@@ -50,10 +51,10 @@ class AudioManager extends EventEmitter{
         const player = new Player(channel);
         
         if(yturl === true){
-            ytstream.getInfo(stream).then(info => {
-                queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume']});
+            playdl.video_basic_info(stream).then(info => {
+              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info.video_details, volume: settings['volume']});
             }).catch(() => {
-                queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
+              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
             });
         } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
 
@@ -127,7 +128,10 @@ class AudioManager extends EventEmitter{
     return new Promise((resolve, reject) => {
       if(globals[channel.id].get(`loop`) === 0){
         queue.shift();
-        if(queue.length === 0) return this.stop(channel);
+        if(queue.length === 0){
+          resolve();
+          return this.stop(channel);
+        }
         player.play(queue[0].url, {
           quality: queue[0].quality,
           autoleave: false,
@@ -213,7 +217,7 @@ class AudioManager extends EventEmitter{
   };
   destroy(){
     for(const global in globals){
-        globals[global].get(`connection`).destroy();
+      globals[global].get(`connection`).destroy();
     }
     globals = {};
     this.emit(constants.EVENTS.AM_DESTROY);
