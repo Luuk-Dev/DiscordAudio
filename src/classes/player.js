@@ -1,7 +1,6 @@
 const voice = require('@discordjs/voice');
 const { createAdapter } = require('../adapter.js');
 const ytstream = require('yt-stream');
-const playdl = require('play-dl');
 const EventEmitter = require('events');
 const constants = require('../util/constants.js');
 const { ValueSaver } = require('valuesaver');
@@ -125,7 +124,7 @@ class Player extends EventEmitter {
             } else {
                 const vidID = ytstream.getID(audiostream)
                 const yturl = `https://www.youtube.com/watch?v=${vidID}`;
-                playdl.stream(yturl, {
+                ytstream.stream(yturl, {
                     quality: settings.quality,
                     discordPlayerCompatibility: true
                 }).then(playable_stream => {
