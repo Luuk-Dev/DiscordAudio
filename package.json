@@ -1,6 +1,6 @@
 {
   "name": "discordaudio",
-  "version": "2.5.6",
+  "version": "2.5.8",
   "description": "Play audio easily in a voice channel for your Discord.js bot. Easy documentations and easy to use.",
   "main": "index.js",
   "scripts": {
@@ -18,7 +18,7 @@
     "opusscript": "^0.0.8",
     "play-dl": "^1.8.9",
     "valuesaver": "^1.7.0",
-    "yt-stream": "^1.0.2"
+    "yt-stream": "^1.1.0"
   },
   "keywords": [
     "audio",
