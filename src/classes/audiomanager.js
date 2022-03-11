@@ -2,7 +2,6 @@ const { Player } = require('./player.js');
 const EventEmitter = require('events');
 const constants = require('../util/constants.js');
 const ytstream = require('yt-stream');
-const playdl = require('play-dl');
 const { ValueSaver } = require('valuesaver');
 
 var globals = {};
@@ -33,8 +32,8 @@ class AudioManager extends EventEmitter{
       if(globals[channel.id]){
         const queue = globals[channel.id].get(`queue`);
         if(yturl === true){
-            playdl.video_basic_info(stream).then(info => {
-              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info.video_details, volume: settings['volume']});
+            ytstream.getInfo(stream).then(info => {
+              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume']});
             }).catch(() => {
               queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
             });
@@ -51,8 +50,8 @@ class AudioManager extends EventEmitter{
         const player = new Player(channel);
         
         if(yturl === true){
-            playdl.video_basic_info(stream).then(info => {
-              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info.video_details, volume: settings['volume']});
+            ytstream.getInfo(stream).then(info => {
+              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume']});
             }).catch(() => {
               queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
             });
