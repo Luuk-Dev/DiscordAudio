@@ -68,6 +68,7 @@ class AudioManager extends EventEmitter{
           this.emit(constants.EVENTS.AM_PLAY, channel, stream);
 
           player.on('stop', () => {
+            if(!(globals[channel.id] instanceof ValueSaver)) return;
             if(globals[channel.id].get(`loop`) === 0) queue.shift();
             else if(globals[channel.id].get(`loop`) === 2){
               queue.push(queue[0]);
