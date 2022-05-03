@@ -88,7 +88,7 @@ class AudioManager extends EventEmitter{
             } else {
               player.destroy();
               globals[channel.id] = undefined;
-              this.emit(constants.EVENTS.AM_END);
+              this.emit(constants.EVENTS.AM_END, channel);
             }
           });
 
