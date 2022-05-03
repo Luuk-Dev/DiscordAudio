@@ -28,7 +28,7 @@ Discord Audio is a stable and easy to use discord voice channel framework which 
 
 ## 📖 Example
 ```js
-const {AudioManager} = require('discordaudio');
+const { AudioManager } = require('discordaudio');
 const discord = require('discord.js');
 
 const client = new discord.Client({intents: [discord.Intents.FLAGS.GUILDS, discord.Intents.FLAGS.GUILD_MESSAGES, discord.Intents.FLAGS.GUILD_VOICE_STATES]});
@@ -99,7 +99,7 @@ client.on('messageCreate', message => {
         case 'volume':
             if(!vc) return message.channel.send({content: `There is currently nothing playing!`});
             if(!args[1]) return message.channel.send({content: `Please provide the volume`});
-            if(Number(args[1] < 1 || Number(args[1]) > 10)) return message.channel.send({content: `Please provide a volume between 1-10`});
+            if(Number(args[1]) < 1 || Number(args[1]) > 10) return message.channel.send({content: `Please provide a volume between 1-10`});
             audioManager.volume(vc, Number(args[1]));
             break;
     }
@@ -107,3 +107,5 @@ client.on('messageCreate', message => {
 
 client.login(config.token);
 ```
+
+Do you have an issue or a question? Go to the [issue page](https://github.com/Luuk-Dev/DiscordAudio) or send me a DM on Discord (Luuk#8524)
