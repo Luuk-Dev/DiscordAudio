@@ -129,13 +129,8 @@ class Player extends EventEmitter {
                     quality: settings.quality,
                     type: 'audio',
                     highWaterMark: 1048576 * 32
-                }).then(async playable_stream => {
-                    try {
-                        var playableStream = await createStream(playable_stream.url);
-                    } catch(err) {
-                        return reject(err);
-                    }
-                    const resource = voice.createAudioResource(playableStream, {
+                }).then(playable_stream => {
+                    const resource = voice.createAudioResource(playable_stream.url, {
                         inputType: playable_stream.type,
                         inlineVolume: true
                     });
