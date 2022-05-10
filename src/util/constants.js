@@ -60,7 +60,11 @@ constantexports.ERRORMESSAGES = {
   PLAY_FUNCTION_NOT_CALLED: 'You need to use the play function before you can use this function',
   DELETE_QUEUE_SONG_NOT_EXISTS: 'The song you are trying to delete from the queue is not in the queue',
   AM_NAN_VOLUME: 'The volume parameter is not a number',
-  AM_INVALID_VOLUME: 'The volume must be at least 1 and can maximum be 10'
+  AM_INVALID_VOLUME: 'The volume must be at least 1 and can maximum be 10',
+  /* Stream creator */
+  INVALID_STREAM_PARAMETER_CREATOR: 'The stream parameter may only be a url or a Readable stream',
+  INVALID_STREAM_URL: 'The stream parameter is not a valid url',
+  STREAM_NOT_AUDIO: 'The stream parameter is not a valid audio file'
 };
 
 constantexports.WARNMESSAGES = {
