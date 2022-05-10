@@ -4,6 +4,7 @@ const ytstream = require('yt-stream');
 const EventEmitter = require('events');
 const constants = require('../util/constants.js');
 const { ValueSaver } = require('valuesaver');
+const createStream = require('../getstream.js');
 
 const wait = (ms) => {
   return new Promise((resolve, reject) => {
@@ -68,7 +69,7 @@ class Player extends EventEmitter {
     * */
     play(stream, options){
         return new Promise((resolve, reject) => {
-            if(stream === undefined || typeof stream === "undefined" || stream === "") return reject(new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_STREAM));
+            if(stream === undefined || typeof stream === "undefined" || stream === "") return reject(constants.ERRORMESSAGES.REQUIRED_PARAMETER_STREAM);
 
             var audiostream = stream;
             globals[this.channel.id].set(`stream`, stream);
@@ -114,7 +115,7 @@ class Player extends EventEmitter {
                     if(settings['autoleave'] === true) if(voice.getVoiceConnection(this.channel.guild.id)) voice.getVoiceConnection(this.channel.guild.id).disconnect();
                 });
                 resource.encoder.on('error', error => {
-                    reject(new Error(`${constants.ERRORMESSAGES.ENCODER_ERROR} ${error}`));
+                    reject(`${constants.ERRORMESSAGES.ENCODER_ERROR} ${error}`);
                 });
                 resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
                 globals[this.channel.id].get(`player`).play(resource);
@@ -126,9 +127,15 @@ class Player extends EventEmitter {
                 const yturl = `https://www.youtube.com/watch?v=${vidID}`;
                 ytstream.stream(yturl, {
                     quality: settings.quality,
-                    discordPlayerCompatibility: true
-                }).then(playable_stream => {
-                    const resource = voice.createAudioResource(playable_stream.url, {
+                    type: 'audio',
+                    highWaterMark: 1048576 * 32
+                }).then(async playable_stream => {
+                    try {
+                        var playableStream = await createStream(playable_stream.url);
+                    } catch(err) {
+                        return reject(err);
+                    }
+                    const resource = voice.createAudioResource(playableStream, {
                         inputType: playable_stream.type,
                         inlineVolume: true
                     });
@@ -143,7 +150,7 @@ class Player extends EventEmitter {
                     if(globals[this.channel.id].get(`resource`)) globals[this.channel.id].get(`resource`).playStream.destroy();
                     globals[this.channel.id].set(`resource`, resource);
                 }).catch(err => {
-                    reject(new Error(constants.ERRORMESSAGES.YOUTUBE_STREAM_FAILED));
+                    reject(constants.ERRORMESSAGES.YOUTUBE_STREAM_FAILED);
                     return;
                 });
             }
