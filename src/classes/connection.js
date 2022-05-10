@@ -3,6 +3,42 @@ const EventEmitter = require('events');
 const { ValueSaver } = require('valuesaver');
 const { createAdapter } = require('../adapter.js');
 const constants = require('../util/constants.js');
+const createStream = require('../getstream.js');
+const AudioStream = require('./audiostream.js');
+
+const globals = {};
+
+async function reloadStream(channelId, options){
+    const player = globals[channelId].get(`player`);
+    const oldStream = globals[channelId].get(`stream`);
+    if(oldStream instanceof AudioStream){
+        oldStream.abort();
+    }
+    var playableStream = typeof oldStream.url === 'string' ? oldStream.url : oldStream;
+    if(typeof oldStream.url === 'string'){
+        try {
+            playableStream = await createStream(playableStream);
+        } catch {
+            playableStream = {stream: oldStream.url, url: oldStream.url};
+        }
+    }
+    const resource = voice.createAudioResource(playableStream.stream, {
+        inlineVolume: true,
+        inputType: options.audiotype
+    });
+    resource.volume.setVolume(options.volume);
+    player.play(resource);
+    globals[channelId].set(`resource`, resource);
+}
+
+function checkStatus(channelId, options){
+    const player = globals[channelId].get(`player`);
+    player.on('stateChange', (oldState, newState) => {
+        if(newState.status === voice.AudioPlayerStatus.Idle){
+            reloadStream(channelId, options);
+        }
+    });
+}
 
 function connect(connection){
     return new Promise(async (resolve, reject) => {
@@ -15,8 +51,6 @@ function connect(connection){
         }
     });
 };
-
-const globals = {};
 
 class Connection extends EventEmitter {
     /**
@@ -70,8 +104,8 @@ class Connection extends EventEmitter {
      * .catch(console.error);
      */
     play(stream, options){
-        return new Promise((resolve, reject) => {
-            if(typeof stream === 'undefined' || stream === undefined || stream === "") return reject(new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_STREAM));
+        return new Promise(async (resolve, reject) => {
+            if(typeof stream === 'undefined' || stream === undefined || stream === "") return reject(constants.ERRORMESSAGES.REQUIRED_PARAMETER_STREAM);
 
             var volume = 1;
             var noSubscriberBehavior = voice.NoSubscriberBehavior.Play;
@@ -97,12 +131,21 @@ class Connection extends EventEmitter {
                     noSubscriber: noSubscriberBehavior
                 }
             });
-                
-            const resource = voice.createAudioResource(stream, {
+
+            var playableStream;
+            try {
+                playableStream = await createStream(stream);
+            } catch (error){
+                playableStream = {stream: stream, url: stream};
+            }
+            
+            const resource = voice.createAudioResource(playableStream.stream, {
                 inputType: audiotype,
                 inlineVolume: true
             });
             resource.volume.setVolume(volume);
+
+            globals[this.channel.id].set(`stream`, playableStream);
 
             resource.playStream.on('end', () => {
                 this.emit(constants.EVENTS.CONNECTION_END, stream);
@@ -127,6 +170,8 @@ class Connection extends EventEmitter {
                 globals[this.channel.id].get(`connection`).on(voice.VoiceConnectionStatus.Destroyed, () => {
                     this.emit(constants.EVENTS.CONNECTION_DESTROY, this.channel.id);
                 });
+
+                checkStatus(this.channel.id, {volume, audiotype});
                 this.emit(constants.EVENTS.CONNECTION_PLAY, stream);
                 resolve(stream);
             }).catch(err => {
