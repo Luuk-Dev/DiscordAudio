@@ -141,7 +141,7 @@ class AudioManager extends EventEmitter{
         }).then(() => {
           resolve();
         }).catch(err => {
-          reject(new Error(err));
+          reject(err);
         });
       } else if(globals[channel.id].get(`loop`) === 2){
         queue.push(queue[0]);
@@ -155,7 +155,7 @@ class AudioManager extends EventEmitter{
         }).then(() => {
           resolve();
         }).catch(err => {
-          reject(new Error(err));
+          reject(err);
         });
       } else if(globals[channel.id].get(`loop`) === 1){
         player.play(queue[0].url, {
@@ -167,7 +167,7 @@ class AudioManager extends EventEmitter{
         }).then(() => {
           resolve();
         }).catch(err => {
-          reject(new Error(err));
+          reject(err);
         });
       }
     });
@@ -206,13 +206,13 @@ class AudioManager extends EventEmitter{
     return new Promise((resolve, reject) => {
       const queue = globals[channel.id].get(`queue`);
       const song = queue.filter(song => song.url === stream);
-      if(!song[0]) return reject( new Error(constants.ERRORMESSAGES.DELETE_QUEUE_SONG_NOT_EXISTS));
+      if(!song[0]) return reject(constants.ERRORMESSAGES.DELETE_QUEUE_SONG_NOT_EXISTS);
       const index = queue.indexOf(song[0]);
       if(index >= 0){
         queue.splice(index, 1);
         resolve();
         this.emit(constants.EVENTS.AM_QUEUE_REMOVE, stream);
-      } else return reject(new Error(constants.ERRORMESSAGES.DELETE_QUEUE_SONG_NOT_EXISTS))
+      } else return reject(constants.ERRORMESSAGES.DELETE_QUEUE_SONG_NOT_EXISTS);
     });
   };
   destroy(){
