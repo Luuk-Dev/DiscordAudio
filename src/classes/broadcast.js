@@ -2,8 +2,42 @@ const voice = require('@discordjs/voice');
 const EventEmitter = require('events');
 const { ValueSaver } = require('valuesaver');
 const constants = require('../util/constants.js');
+const createStream = require('../getstream.js');
+const AudioStream = require('./audiostream.js');
 
 const globals = {};
+
+async function reloadStream(customId, options){
+    const player = globals[customId].get(`player`);
+    const oldStream = globals[customId].get(`stream`);
+    if(oldStream instanceof AudioStream){
+        oldStream.abort();
+    }
+    var playableStream = typeof oldStream.url == 'string' ? oldStream.url : oldStream;
+    if(typeof oldStream.url === 'string'){
+        try {
+            playableStream = await createStream(playableStream);
+        } catch(err) {
+            playableStream = {stream: oldStream.url, url: oldStream.url};
+        }
+    }
+    const resource = voice.createAudioResource(playableStream.stream, {
+        inlineVolume: true,
+        inputType: options.audiotype
+    });
+    resource.volume.setVolume(options.volume);
+    player.play(resource);
+    globals[customId].set(`resource`, resource);
+}
+
+function checkStatus(customId, options){
+    const player = globals[customId].get(`player`);
+    player.on('stateChange', (oldState, newState) => {
+        if(newState.status === voice.AudioPlayerStatus.Idle){
+            reloadStream(customId, options);
+        }
+    });
+}
 
 const custom = (length = 20) => {
     var characters = '0123456789abcdefghijklmnopqrstuvwxyz';
@@ -28,14 +62,12 @@ class Broadcast extends EventEmitter{
      * });
      */
     constructor(stream, options){
-        if(typeof stream === 'undefined' || stream === undefined || stream === "") throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_STREAM);
+        if(typeof stream === 'undefined' || stream === undefined || stream === "") throw new Error (constants.ERRORMESSAGES.REQUIRED_PARAMETER_STREAM);
         super();
 
         const id = custom();
         this.id = id;
         globals[id] = new ValueSaver();
-
-        globals[id].set(`stream`, stream);
 
         var volume = 1;
         var noSubscribers = voice.NoSubscriberBehavior.Play;
@@ -54,33 +86,44 @@ class Broadcast extends EventEmitter{
             if(options.audiotype) if(typeof options.audiotype === 'string') audiotype = options.audiotype.toLowerCase();
         }
 
-        const player = voice.createAudioPlayer({
-            behaviors: {
-                noSubscriber: noSubscribers
+        (async () => {
+            var playableStream = stream;
+            try{
+                playableStream = await createStream(stream);
+            } catch(error) {
+                playableStream = {stream: stream, url: stream};
             }
-        });
+            globals[id].set(`stream`, playableStream);
 
-        globals[id].set(`player`, player);
+            const player = voice.createAudioPlayer({
+                behaviors: {
+                    noSubscriber: noSubscribers
+                }
+            });
 
-        const resource = voice.createAudioResource(stream, {
-            inlineVolume: true,
-            inputType: audiotype
-        });
-        resource.volume.setVolume(volume);
+            globals[id].set(`player`, player);
 
-        resource.playStream.on('end', () => {
-            this.emit(constants.EVENTS.BROADCAST_END, stream);
-        });
+            const resource = voice.createAudioResource(playableStream ? playableStream.stream : stream, {
+                inlineVolume: true,
+                inputType: audiotype
+            });
+            resource.volume.setVolume(volume);
 
-        resource.volume.setVolumeLogarithmic(volume / 1);
+            resource.playStream.on('end', () => {
+                this.emit(constants.EVENTS.BROADCAST_END, stream);
+            });
 
-        globals[id].set(`resource`, resource);
+            resource.volume.setVolumeLogarithmic(volume / 1);
 
-        globals[id].get(`player`).play(resource);
-        this.emit(constants.EVENTS.BROADCAST_PLAY, stream);
-        voice.entersState(player, voice.AudioPlayerStatus.Playing, 5e3);
+            globals[id].set(`resource`, resource);
 
-        globals[id].get(`player`).pause();
+            globals[id].get(`player`).play(resource);
+            checkStatus(id, {volume: volume, audiotype: audiotype});
+            this.emit(constants.EVENTS.BROADCAST_PLAY, stream);
+            voice.entersState(player, voice.AudioPlayerStatus.Playing, 5e3);
+
+            globals[id].get(`player`).pause();
+        })();
     }
     /**
      * Passes the globals ValueSaver
@@ -95,7 +138,7 @@ class Broadcast extends EventEmitter{
      * broadcast.pause();
      */
     pause(){
-        globals[id].get(`player`).pause();
+        globals[this.id].get(`player`).pause();
     }
     /**
      * Resumes the paused stream.
@@ -103,7 +146,7 @@ class Broadcast extends EventEmitter{
      * broadcast.resume();
      */
     resume(){
-        globals[id].get(`player`).unpause();
+        globals[this.id].get(`player`).unpause();
     }
     /**
      * Destroys the broadcast.
@@ -111,8 +154,12 @@ class Broadcast extends EventEmitter{
      * broadcast.destroy();
      */
     destroy(){
-        globals[id].get(`player`).removeAllListeners();
-        globals[id].get(`resource`).playStream.destroy();
+        const stream = globals[this.id].get(`stream`);
+        if(stream instanceof AudioStream){
+            stream.abort();
+        }
+        globals[this.id].get(`player`).removeAllListeners();
+        globals[this.id].get(`resource`).playStream.destroy();
     }
     /**
      * Changes the volume of the broadcast.
@@ -125,7 +172,7 @@ class Broadcast extends EventEmitter{
         if(isNaN(volume)) throw new Error(constants.ERRORMESSAGES.VOLUME_NAN);
         else if(volume > 1) throw new Error(constants.ERRORMESSAGES.VOLUME_MAX_1);
 
-        globals[id].get(`resource`).volume.setVolume(volume);
+        globals[this.id].get(`resource`).volume.setVolume(volume);
     }
 }
 
