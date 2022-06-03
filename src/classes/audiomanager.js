@@ -83,7 +83,7 @@ class AudioManager extends EventEmitter{
                 quality: queue[0].quality,
                 volume: (settings['volume'] / 10)
               }).catch(err => {
-                this.emit(constants.EVENTS.AM_ERROR, new Error(err));
+                this.emit(constants.EVENTS.AM_ERROR, err);
               })
             } else {
               player.destroy();
@@ -96,7 +96,7 @@ class AudioManager extends EventEmitter{
           resolve(false);
         }).catch(err => {
           reject(err);
-          this.emit(constants.EVENTS.AM_ERROR, new Error(err));
+          this.emit(constants.EVENTS.AM_ERROR, err);
         });
       }
     });
