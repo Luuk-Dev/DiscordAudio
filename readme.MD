@@ -24,14 +24,14 @@ Discord Audio is a stable and easy to use discord voice channel framework which 
 
 ## 🔗 Links
 * [Full documentation](https://zyno-studio.gitbook.io/discord-audio)
-* [Support Server](https://www.extive.eu/discord)
+* [Support Server](https://www.weijers.one/discord)
 
 ## 📖 Example
 ```js
 const { AudioManager } = require('discordaudio');
 const discord = require('discord.js');
 
-const client = new discord.Client({intents: [discord.Intents.FLAGS.GUILDS, discord.Intents.FLAGS.GUILD_MESSAGES, discord.Intents.FLAGS.GUILD_VOICE_STATES]});
+const client = new discord.Client({intents: [discord.GatewayIntentBits.Guilds, discord.GatewayIntentBits.GuildMessages, discord.GatewayIntentBits.GuildVoiceStates]});
 
 const config = {
     token: 'Your-Secret-Token',
@@ -45,7 +45,7 @@ const audioManager = new AudioManager();
 client.once('ready', () => console.log(`${client.user.username} is online!`));
 
 client.on('messageCreate', message => {
-    if(message.author.bot || message.channel.type === `DM`) return;
+    if(message.author.bot || message.channel.type === discord.ChannelType.DM) return;
     
     if(!message.content.startsWith(config.prefix)) return;
     
