@@ -49,22 +49,27 @@ function trackGuild(guild) {
  * @param channel - The channel to create the adapter for
  */
 function createAdapter(channel) {
-    return (methods) => {
-        adapters.set(channel.guild.id, methods);
-        trackClient(channel.client);
-        trackGuild(channel.guild);
-        return {
-            sendPayload(data) {
-                if (channel.guild.shard.status === discord_js_1.Constants.Status.READY) {
-                    channel.guild.shard.send(data);
-                    return true;
-                }
-                return false;
-            },
-            destroy() {
-                return adapters.delete(channel.guild.id);
-            },
+    if(typeof discord_js_1.Constants.WSEvents !== 'undefined'){
+        return (methods) => {
+            adapters.set(channel.guild.id, methods);
+            trackClient(channel.client);
+            trackGuild(channel.guild);
+            return {
+                sendPayload(data) {
+                    if (channel.guild.shard.status === discord_js_1.Constants.Status.READY) {
+                        channel.guild.shard.send(data);
+                        return true;
+                    }
+                    return false;
+                },
+                destroy() {
+                    return adapters.delete(channel.guild.id);
+                },
+            };
         };
-    };
+    } else {
+        return channel.guild.voiceAdapterCreator;
+    }
 }
+
 exports.createAdapter = createAdapter;
