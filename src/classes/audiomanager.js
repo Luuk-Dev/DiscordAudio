@@ -26,17 +26,29 @@ class AudioManager extends EventEmitter{
       if(typeof options.audiotype === 'string') settings['audiotype'] = options.audiotype;
       if(typeof options.volume === 'number') settings['volume'] = options.volume;
     }
-    const yturl = ytstream.validateURL(stream);
+    const yturl = ytstream.validateVideoURL(stream);
+    const playlisturl = ytstream.validatePlaylistURL(stream);
 
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       if(globals[channel.id]){
         const queue = globals[channel.id].get(`queue`);
         if(yturl === true){
-            ytstream.getInfo(stream).then(info => {
-              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume']});
-            }).catch(() => {
-              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
-            });
+            try{
+                var info = await ytstream.getInfo(stream);
+              	queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume']});
+            } catch {
+              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});                
+            }
+        } else if(playlisturl === true){
+          try{
+              var playlist = await ytstream.getPlaylist(stream);
+              var playlistInfo = playlist.videos.map(v => {
+                return {url: v.video_url, quality: settings['quality'], audiotype: settings['audiotype'], info: v, volume: settings['volume']};
+              });
+              queue.push(...playlistInfo);
+          } catch {
+            reject(`The parsed url is an invalid playlist url`);              
+          }
         } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
         this.emit(constants.EVENTS.AM_QUEUE_ADD, stream);
         resolve(true);
@@ -50,14 +62,25 @@ class AudioManager extends EventEmitter{
         const player = new Player(channel);
         
         if(yturl === true){
-            ytstream.getInfo(stream).then(info => {
-              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume']});
-            }).catch(() => {
-              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
-            });
+            try{
+                var info = await ytstream.getInfo(stream);
+              	queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume']});
+            } catch {
+              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});                
+            }
+        } else if(playlisturl === true){
+          try{
+              var playlist = await ytstream.getPlaylist(stream);
+              var playlistInfo = playlist.videos.map(v => {
+                return {url: v.video_url, quality: settings['quality'], audiotype: settings['audiotype'], info: v, volume: settings['volume']};
+              });
+              queue.push(...playlistInfo);
+          } catch {
+            reject(`The parsed url is an invalid playlist url`);              
+          }
         } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
-
-        player.play(stream, {
+        globals[channel.id].set(`queue`, queue);
+        player.play(queue[0].url, {
           autoleave: false,
           selfDeaf: true,
           selfMute: false,
