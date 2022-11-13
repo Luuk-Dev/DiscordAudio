@@ -82,7 +82,7 @@ class Player extends EventEmitter {
                 audiotype: voice.StreamType.Arbitrary,
                 volume: 1
             };
-            const yturl = ytstream.validateURL(audiostream) ? true : false;
+            const yturl = ytstream.validateVideoURL(audiostream) ? true : false;
             if(options){
                 if(typeof options.autoleave === 'boolean') settings['autoleave'] = Boolean(options.autoleave);
                 if(typeof options.selfDeaf === 'boolean') settings['selfDeaf'] = Boolean(options.selfDeaf);
@@ -123,7 +123,7 @@ class Player extends EventEmitter {
                 if(globals[this.channel.id].get(`resource`)) globals[this.channel.id].get(`resource`).playStream.destroy();
                 globals[this.channel.id].set(`resource`, resource);
             } else {
-                const vidID = ytstream.getID(audiostream)
+                const vidID = ytstream.getID(audiostream);
                 const yturl = `https://www.youtube.com/watch?v=${vidID}`;
                 ytstream.stream(yturl, {
                     quality: settings.quality,
