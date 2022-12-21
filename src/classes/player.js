@@ -130,11 +130,11 @@ class Player extends EventEmitter {
                     type: 'audio',
                     highWaterMark: 1048576 * 32
                 }).then(playable_stream => {
-                    const resource = voice.createAudioResource(playable_stream.url, {
+                    const resource = voice.createAudioResource(playable_stream.stream, {
                         inputType: playable_stream.type,
                         inlineVolume: true
                     });
-                    resource.playStream.on('end', () => {
+                    playable_stream.stream.on('close', () => {
                         this.emit(constants.EVENTS.AUDIO_END, audiostream);
                         this.playing = false;
                         if(settings['autoleave'] === true) if(voice.getVoiceConnection(this.channel.guild.id)) voice.getVoiceConnection(this.channel.guild.id).disconnect();
