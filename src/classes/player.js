@@ -71,6 +71,18 @@ class Player extends EventEmitter {
         return new Promise((resolve, reject) => {
             if(stream === undefined || typeof stream === "undefined" || stream === "") return reject(constants.ERRORMESSAGES.REQUIRED_PARAMETER_STREAM);
 
+            var currentResource = globals[this.channel.id].get(`resource`);
+            var subscribtion = globals[this.channel.id].get(`subscription`);
+            if(subscribtion){
+                subscribtion.unsubscribe();
+                globals[this.channel.id].delete(`subscription`);
+            }
+            if(currentResource){
+                currentResource.audioPlayer.stop(true);
+                currentResource.playStream.destroy();
+                globals[this.channel.id].delete(`resource`);
+            }
+
             var audiostream = stream;
             globals[this.channel.id].set(`stream`, stream);
             const settings = {
@@ -120,7 +132,12 @@ class Player extends EventEmitter {
                 resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
                 globals[this.channel.id].get(`player`).play(resource);
                 voice.entersState(globals[this.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
-                if(globals[this.channel.id].get(`resource`)) globals[this.channel.id].get(`resource`).playStream.destroy();
+                if(globals[this.channel.id].get(`resource`)){
+                    var oldResource = globals[this.channel.id].get(`resource`);
+                    if(typeof oldResource.playStream !== 'undefined'){
+                        globals[this.channel.id].get(`resource`).playStream.destroy();
+                    }
+                }
                 globals[this.channel.id].set(`resource`, resource);
             } else {
                 const vidID = ytstream.getID(audiostream);
@@ -135,6 +152,8 @@ class Player extends EventEmitter {
                         inlineVolume: true
                     });
                     playable_stream.stream.on('close', () => {
+                        if(!globals[this.channel.id].get(`resource`)) return;
+                        globals[this.channel.id].delete(`resource`);
                         this.emit(constants.EVENTS.AUDIO_END, audiostream);
                         this.playing = false;
                         if(settings['autoleave'] === true) if(voice.getVoiceConnection(this.channel.guild.id)) voice.getVoiceConnection(this.channel.guild.id).disconnect();
@@ -142,7 +161,12 @@ class Player extends EventEmitter {
                     resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
                     globals[this.channel.id].get(`player`).play(resource);
                     voice.entersState(globals[this.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
-                    if(globals[this.channel.id].get(`resource`)) globals[this.channel.id].get(`resource`).playStream.destroy();
+                    if(globals[this.channel.id].get(`resource`)){
+                        var oldResource = globals[this.channel.id].get(`resource`);
+                        if(typeof oldResource.playStream !== 'undefined'){
+                            globals[this.channel.id].get(`resource`).playStream.destroy();
+                        }
+                    }
                     globals[this.channel.id].set(`resource`, resource);
                 }).catch(err => {
                     reject(constants.ERRORMESSAGES.YOUTUBE_STREAM_FAILED);
