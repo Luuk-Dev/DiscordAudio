@@ -145,7 +145,7 @@ class Player extends EventEmitter {
                 ytstream.stream(yturl, {
                     quality: settings.quality,
                     type: 'audio',
-                    highWaterMark: 1048576 * 32
+                    highWaterMark: 1048576 * 16
                 }).then(playable_stream => {
                     const resource = voice.createAudioResource(playable_stream.stream, {
                         inputType: playable_stream.type,
