@@ -156,7 +156,7 @@ class Connection extends EventEmitter {
             });
 
             player.play(resource);
-            voice.entersState(player, voice.AudioPlayerStatus.Playing, 5e3);
+            await voice.entersState(player, voice.AudioPlayerStatus.Playing, 5e3);
 
             globals[this.channel.id].set(`resource`, resource);
             globals[this.channel.id].set(`player`, player);
