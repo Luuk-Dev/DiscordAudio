@@ -68,7 +68,7 @@ class Player extends EventEmitter {
     * .catch(console.error);
     * */
     play(stream, options){
-        return new Promise((resolve, reject) => {
+        return new Promise(async (resolve, reject) => {
             if(stream === undefined || typeof stream === "undefined" || stream === "") return reject(constants.ERRORMESSAGES.REQUIRED_PARAMETER_STREAM);
 
             var currentResource = globals[this.channel.id].get(`resource`);
@@ -131,7 +131,7 @@ class Player extends EventEmitter {
                 });
                 resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
                 globals[this.channel.id].get(`player`).play(resource);
-                voice.entersState(globals[this.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
+                await voice.entersState(globals[this.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
                 if(globals[this.channel.id].get(`resource`)){
                     var oldResource = globals[this.channel.id].get(`resource`);
                     if(typeof oldResource.playStream !== 'undefined'){
@@ -146,7 +146,7 @@ class Player extends EventEmitter {
                     quality: settings.quality,
                     type: 'audio',
                     highWaterMark: 1048576 * 16
-                }).then(playable_stream => {
+                }).then(async playable_stream => {
                     const resource = voice.createAudioResource(playable_stream.stream, {
                         inputType: playable_stream.type,
                         inlineVolume: true
@@ -160,7 +160,7 @@ class Player extends EventEmitter {
                     });
                     resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
                     globals[this.channel.id].get(`player`).play(resource);
-                    voice.entersState(globals[this.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
+                    await voice.entersState(globals[this.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
                     if(globals[this.channel.id].get(`resource`)){
                         var oldResource = globals[this.channel.id].get(`resource`);
                         if(typeof oldResource.playStream !== 'undefined'){
