@@ -31,7 +31,7 @@ class AudioManager extends EventEmitter{
 
     return new Promise(async (resolve, reject) => {
       if(globals[channel.id]){
-        const queue = globals[channel.id].get(`queue`);
+        var queue = globals[channel.id].get(`queue`);
         if(yturl === true){
             try{
                 var info = await ytstream.getInfo(stream);
@@ -50,6 +50,7 @@ class AudioManager extends EventEmitter{
             reject(`The parsed url is an invalid playlist url`);              
           }
         } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
+        globals[channel.id].set(`queue`, queue);
         this.emit(constants.EVENTS.AM_QUEUE_ADD, stream);
         resolve(true);
       } else {
@@ -57,7 +58,7 @@ class AudioManager extends EventEmitter{
         globals[channel.id].set(`queue`, []);
         globals[channel.id].set(`loop`, 0);
 
-        const queue = globals[channel.id].get(`queue`);
+        var queue = globals[channel.id].get(`queue`);
 
         const player = new Player(channel);
         
@@ -92,6 +93,7 @@ class AudioManager extends EventEmitter{
 
           player.on('stop', () => {
             if(!(globals[channel.id] instanceof ValueSaver)) return;
+            queue = globals[channel.id].get(`queue`);
             if(globals[channel.id].get(`loop`) === 0) queue.shift();
             else if(globals[channel.id].get(`loop`) === 2){
               queue.push(queue[0]);
@@ -238,6 +240,22 @@ class AudioManager extends EventEmitter{
       } else return reject(constants.ERRORMESSAGES.DELETE_QUEUE_SONG_NOT_EXISTS);
     });
   };
+  shuffle(channel){
+    if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
+    if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
+    var queue = [...globals[channel.id].get(`queue`)];
+    const firstSong = queue[0];
+    queue.shift();
+    for(var i = 0; i < queue.length; i++){
+      const queueVal = queue[i];
+      const randIndex = Math.round(Math.random() * (queue.length - 1));
+      const replaceVal = queue[randIndex];
+      queue[i] = replaceVal;
+      queue[randIndex] = queueVal;
+    }
+    queue = [firstSong, ...queue]
+    globals[channel.id].set(`queue`, queue);
+  }
   destroy(){
     for(const global in globals){
       globals[global].get(`connection`).destroy();
