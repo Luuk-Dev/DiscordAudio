@@ -1,4 +1,4 @@
-const {createAdapter} = require('../adapter.js');
+const { createAdapter } = require('../adapter.js');
 const constants = require('../util/constants.js');
 
 class Adapter{
