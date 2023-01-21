@@ -25,6 +25,7 @@ type StreamBroadcastOptions = {
 type StreamConnectionOptions = {
     noListeners: NoListeners;
     volume: number;
+    audiotype: AudioTypeOptions;
 };
 
 type StreamAudioManagerOptions = {
@@ -282,6 +283,11 @@ export declare class Connection{
     on<T extends keyof ConnectionEvents>(eventName: T, listener: (...args: ConnectionEvents[T]) => void);
     once<T extends keyof ConnectionEvents>(eventName: T, listener: (...args: ConnectionEvents[T]) => void);
     emit<T extends keyof ConnectionEvents>(eventName: T, listener: (...args: ConnectionEvents[T]) => void);
+
+    /**
+     * Whether the bot is playing a stream or a Broadcast
+     */
+    type: string;
 }
 
 export declare class Adapter{
@@ -400,6 +406,15 @@ export declare class AudioManager{
      * audioManager.pause(<channel>);
      */
     pause(channel: VoiceChannel);
+
+    /**
+     * Shuffles the queue
+     * @param {object} channel The voice channel of the queue that should be shuffled
+     * @example
+     * audioManager.shuffle(<channel>);
+     */
+    shuffle(channel: VoiceChannel);
+
     on<T extends keyof AudioManagerEvents>(eventName: T, listener: (...args: AudioManagerEvents[T]) => void);
     once<T extends keyof AudioManagerEvents>(eventName: T, listener: (...args: AudioManagerEvents[T]) => void);
     emit<T extends keyof AudioManagerEvents>(eventName: T, listener: (...args: AudioManagerEvents[T]) => void);
