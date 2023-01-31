@@ -304,6 +304,7 @@ class Player extends EventEmitter {
      */
     volume(volume){
         if(typeof volume !== "string" && typeof volume !== "number") throw new Error(constants.ERRORMESSAGES.INVALID_VOLUME_PARAMETER);
+        if(!globals[this.channel.id].get(`resource`)) return;
         if(typeof volume === "number"){
             if(volume > 10) throw new Error(constants.ERRORMESSAGES.VOLUME_MAX_10);
             globals[this.channel.id].get(`resource`).volume.setVolumeLogarithmic(volume / 10);
