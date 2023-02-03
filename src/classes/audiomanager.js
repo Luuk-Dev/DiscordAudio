@@ -271,6 +271,12 @@ class AudioManager extends EventEmitter{
     const player = globals[channel.id].get(`connection`);
     player.volume(`${volume}/10`);
   };
+  set cookie(newCookie){
+    ytstream.cookie = newCookie;
+  };
+  get cookie(){
+    return ytstream.cookie;
+  };
 };
 
 module.exports = {AudioManager};

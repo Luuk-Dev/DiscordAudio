@@ -316,6 +316,12 @@ class Player extends EventEmitter {
             globals[this.channel.id].get(`resource`).volume.setVolumeLogarithmic(Number(vol[0]) / Number(vol[1]));
         }
     }
+    set cookie(newCookie){
+        ytstream.cookie = newCookie;
+    }
+    get cookie(){
+        return ytstream.cookie;
+    }
 };
 
 module.exports = {Player};
