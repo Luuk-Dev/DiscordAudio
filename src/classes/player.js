@@ -124,7 +124,7 @@ class Player extends EventEmitter {
                 resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
                 globals[this.channel.id].get(`player`).play(resource);
                 globals[this.channel.id].get('player').once(voice.AudioPlayerStatus.Idle, () => {
-                    if(!globals[this.channel.id].get(`resource`)) return;
+                    if(!globals[this.channel.id].get(`resource`) || this.playing === false) return;
                     globals[this.channel.id].delete(`resource`);
                     this.emit(constants.EVENTS.AUDIO_END, audiostream);
                     this.playing = false;
@@ -153,7 +153,7 @@ class Player extends EventEmitter {
                     resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
                     globals[this.channel.id].get(`player`).play(resource);
                     globals[this.channel.id].get('player').once(voice.AudioPlayerStatus.Idle, () => {
-                        if(!globals[this.channel.id].get(`resource`)) return;
+                        if(!globals[this.channel.id].get(`resource`) || this.playing === false) return;
                         globals[this.channel.id].delete(`resource`);
                         this.emit(constants.EVENTS.AUDIO_END, audiostream);
                         this.playing = false;
