@@ -123,6 +123,7 @@ class Player extends EventEmitter {
                 });
                 resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
                 globals[this.channel.id].get(`player`).play(resource);
+                this.playing = true;
                 globals[this.channel.id].get('player').once(voice.AudioPlayerStatus.Idle, () => {
                     if(!globals[this.channel.id].get(`resource`) || this.playing === false) return;
                     globals[this.channel.id].delete(`resource`);
@@ -152,6 +153,7 @@ class Player extends EventEmitter {
                     });
                     resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
                     globals[this.channel.id].get(`player`).play(resource);
+                    this.playing = true;
                     globals[this.channel.id].get('player').once(voice.AudioPlayerStatus.Idle, () => {
                         if(!globals[this.channel.id].get(`resource`) || this.playing === false) return;
                         globals[this.channel.id].delete(`resource`);
