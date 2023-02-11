@@ -78,6 +78,9 @@ class Player extends EventEmitter {
                 globals[this.channel.id].delete(`subscription`);
             }
             if(currentResource){
+                if(this.playing === true){
+                    this.playing = false;
+                }
                 currentResource.audioPlayer.stop(true);
                 currentResource.playStream.destroy();
                 globals[this.channel.id].delete(`resource`);
@@ -112,10 +115,6 @@ class Player extends EventEmitter {
             }
 
             globals[this.channel.id].set(`settings`, settings);
-
-            if(this.playing === true){
-                this.playing = false;
-            }
             if(globals[this.channel.id].get(`settings`).youtube === false){
                 const resource = voice.createAudioResource(audiostream, {
                     inputType: settings.audiotype,
@@ -123,7 +122,6 @@ class Player extends EventEmitter {
                 });
                 resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
                 globals[this.channel.id].get(`player`).play(resource);
-                this.playing = true;
                 globals[this.channel.id].get('player').once(voice.AudioPlayerStatus.Idle, () => {
                     if(!globals[this.channel.id].get(`resource`) || this.playing === false) return;
                     globals[this.channel.id].delete(`resource`);
@@ -132,6 +130,7 @@ class Player extends EventEmitter {
                     if(settings['autoleave'] === true) if(voice.getVoiceConnection(this.channel.guild.id)) voice.getVoiceConnection(this.channel.guild.id).disconnect();
                 });
                 await voice.entersState(globals[this.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
+                this.playing = true;
                 if(globals[this.channel.id].get(`resource`)){
                     var oldResource = globals[this.channel.id].get(`resource`);
                     if(typeof oldResource.playStream !== 'undefined'){
@@ -153,7 +152,6 @@ class Player extends EventEmitter {
                     });
                     resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
                     globals[this.channel.id].get(`player`).play(resource);
-                    this.playing = true;
                     globals[this.channel.id].get('player').once(voice.AudioPlayerStatus.Idle, () => {
                         if(!globals[this.channel.id].get(`resource`) || this.playing === false) return;
                         globals[this.channel.id].delete(`resource`);
@@ -162,6 +160,7 @@ class Player extends EventEmitter {
                         if(settings['autoleave'] === true) if(voice.getVoiceConnection(this.channel.guild.id)) voice.getVoiceConnection(this.channel.guild.id).disconnect();
                     });
                     await voice.entersState(globals[this.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
+                    this.playing = true;
                     if(globals[this.channel.id].get(`resource`)){
                         var oldResource = globals[this.channel.id].get(`resource`);
                         if(typeof oldResource.playStream !== 'undefined'){
