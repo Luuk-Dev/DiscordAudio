@@ -121,16 +121,15 @@ class Player extends EventEmitter {
                     inputType: settings.audiotype,
                     inlineVolume: true
                 });
-                resource.playStream.on('end', () => {
+                resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
+                globals[this.channel.id].get(`player`).play(resource);
+                globals[this.channel.id].get('player').once(voice.AudioPlayerStatus.Idle, () => {
+                    if(!globals[this.channel.id].get(`resource`)) return;
+                    globals[this.channel.id].delete(`resource`);
                     this.emit(constants.EVENTS.AUDIO_END, audiostream);
                     this.playing = false;
                     if(settings['autoleave'] === true) if(voice.getVoiceConnection(this.channel.guild.id)) voice.getVoiceConnection(this.channel.guild.id).disconnect();
                 });
-                resource.encoder.on('error', error => {
-                    reject(`${constants.ERRORMESSAGES.ENCODER_ERROR} ${error}`);
-                });
-                resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
-                globals[this.channel.id].get(`player`).play(resource);
                 await voice.entersState(globals[this.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
                 if(globals[this.channel.id].get(`resource`)){
                     var oldResource = globals[this.channel.id].get(`resource`);
@@ -151,15 +150,15 @@ class Player extends EventEmitter {
                         inputType: playable_stream.type,
                         inlineVolume: true
                     });
-                    playable_stream.stream.on('close', () => {
+                    resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
+                    globals[this.channel.id].get(`player`).play(resource);
+                    globals[this.channel.id].get('player').once(voice.AudioPlayerStatus.Idle, () => {
                         if(!globals[this.channel.id].get(`resource`)) return;
                         globals[this.channel.id].delete(`resource`);
                         this.emit(constants.EVENTS.AUDIO_END, audiostream);
                         this.playing = false;
                         if(settings['autoleave'] === true) if(voice.getVoiceConnection(this.channel.guild.id)) voice.getVoiceConnection(this.channel.guild.id).disconnect();
                     });
-                    resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
-                    globals[this.channel.id].get(`player`).play(resource);
                     await voice.entersState(globals[this.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
                     if(globals[this.channel.id].get(`resource`)){
                         var oldResource = globals[this.channel.id].get(`resource`);
