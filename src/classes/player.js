@@ -17,6 +17,7 @@ const wait = (ms) => {
 function connect(connection){
     return new Promise(async (resolve, reject) => {
         try{
+            await voice.entersState(connection, voice.VoiceConnectionStatus.Connecting, 5e3);
             await voice.entersState(connection, voice.VoiceConnectionStatus.Ready, 30e3);
             resolve();
         } catch(error) {
