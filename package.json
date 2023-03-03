@@ -1,6 +1,6 @@
 {
   "name": "discordaudio",
-  "version": "2.9.8",
+  "version": "3.0.2",
   "description": "Play audio easily in a voice channel for your Discord.js bot. Easy documentations and easy to use.",
   "main": "index.js",
   "scripts": {
