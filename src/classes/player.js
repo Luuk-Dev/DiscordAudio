@@ -200,11 +200,6 @@ class Player extends EventEmitter {
                         this.removeAllListeners(`stop`);
                         this.emit(constants.EVENTS.AUDIO_CONNECTION_DESTROY, this.channel.id);
                     });
-                    connection.on('stateChange', (oldState, newState) => {
-                        if(oldState.status === voice.VoiceConnectionStatus.Ready && newState.status === voice.VoiceConnectionStatus.Connecting){
-                            connection.configureNetworking();
-                        }
-                    });
                     this.emit(constants.EVENTS.AUDIO_PLAY, globals[this.channel.id].get(`stream`));
                     this.removeAllListeners(constants.EVENTS.AUDIO_PLAY);
                     resolve(audiostream);
