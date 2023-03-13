@@ -170,12 +170,6 @@ class Connection extends EventEmitter {
                 globals[this.channel.id].get(`connection`).on(voice.VoiceConnectionStatus.Destroyed, () => {
                     this.emit(constants.EVENTS.CONNECTION_DESTROY, this.channel.id);
                 });
-                globals[this.channel.id].get(`connection`).on('stateChange', (oldState, newState) => {
-                    if(oldState.status === voice.VoiceConnectionStatus.Ready && newState.status === voice.VoiceConnectionStatus.Connecting){
-                        globals[this.channel.id].get(`connection`).configureNetworking();
-                    }
-                });
-
                 checkStatus(this.channel.id, {volume, audiotype});
                 this.emit(constants.EVENTS.CONNECTION_PLAY, stream);
                 resolve(stream);
@@ -208,11 +202,6 @@ class Connection extends EventEmitter {
                 });
                 globals[this.channel.id].get(`connection`).on(voice.VoiceConnectionStatus.Destroyed, () => {
                     this.emit(constants.EVENTS.CONNECTION_BROADCAST_DESTROY, this.channel.id);
-                });
-                globals[this.channel.id].get(`connection`).on('stateChange', (oldState, newState) => {
-                    if(oldState.status === voice.VoiceConnectionStatus.Ready && newState.status === voice.VoiceConnectionStatus.Connecting){
-                        globals[this.channel.id].get(`connection`).configureNetworking();
-                    }
                 });
                 this.emit(constants.EVENTS.CONNECTION_PLAY);
                 resolve();
