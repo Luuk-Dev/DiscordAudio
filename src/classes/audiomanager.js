@@ -25,12 +25,15 @@ class AudioManager extends EventEmitter{
       if(typeof options.quality === 'string') settings['quality'] = options.quality.toLowerCase() === 'low' ? options.quality : 'high';
       if(typeof options.audiotype === 'string') settings['audiotype'] = options.audiotype;
       if(typeof options.volume === 'number') settings['volume'] = options.volume;
-    }
+    } else options = {};
     const yturl = ytstream.validateVideoURL(stream);
     const playlisturl = ytstream.validatePlaylistURL(stream);
 
     return new Promise(async (resolve, reject) => {
-      if(globals[channel.id]){
+      if(globals[channel.id] instanceof ValueSaver){
+        if(typeof options.volume === 'number'){
+          globals[channel.id].set(`volume`, options.volume / 10);
+        }
         var queue = globals[channel.id].get(`queue`);
         if(yturl === true){
             try{
@@ -50,13 +53,20 @@ class AudioManager extends EventEmitter{
             reject(`The parsed url is an invalid playlist url`);              
           }
         } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume']});
-        globals[channel.id].set(`queue`, queue);
-        this.emit(constants.EVENTS.AM_QUEUE_ADD, stream);
-        resolve(true);
+        if(globals[channel.id] instanceof ValueSaver){
+          globals[channel.id].set(`queue`, queue);
+          this.emit(constants.EVENTS.AM_QUEUE_ADD, stream);
+          resolve(true);
+        } else {
+          this.play(channel, stream, options).then(resolve).catch(reject);
+        }
       } else {
         globals[channel.id] = new ValueSaver();
         globals[channel.id].set(`queue`, []);
         globals[channel.id].set(`loop`, 0);
+        if(typeof options.volume === 'number'){
+          globals[channel.id].set(`volume`, options.volume / 10);
+        }
 
         var queue = globals[channel.id].get(`queue`);
 
@@ -87,7 +97,7 @@ class AudioManager extends EventEmitter{
           selfMute: false,
           audiotype: settings['audiotype'],
           quality: settings['quality'],
-          volume: (settings['volume'] / 10)
+          volume: globals[channel.id].get(`volume`) || (settings['volume'] / 10)
         }).then(() => {
           this.emit(constants.EVENTS.AM_PLAY, channel, stream);
 
@@ -106,7 +116,7 @@ class AudioManager extends EventEmitter{
                 selfMute: false,
                 audiotype: queue[0].audiotype,
                 quality: queue[0].quality,
-                volume: (settings['volume'] / 10)
+                volume: globals[channel.id].get(`volume`) || (settings['volume'] / 10)
               }).catch(err => {
                 this.emit(constants.EVENTS.AM_ERROR, err);
               })
@@ -122,6 +132,12 @@ class AudioManager extends EventEmitter{
         }).catch(err => {
           reject(err);
           this.emit(constants.EVENTS.AM_ERROR, err);
+        });
+
+        player.once(constants.EVENTS.AUDIO_CONNECTION_DISCONNECT, (channelId) => { 
+          globals[channelId].get(`connection`).destroy();
+          this.emit(constants.EVENTS.AM_CONNECTION_DESTROY, channel);
+          globals[channelId] = undefined;
         });
       }
     });
@@ -269,6 +285,7 @@ class AudioManager extends EventEmitter{
     if(isNaN(volume)) throw new Error(constants.ERRORMESSAGES.AM_NAN_VOLUME);
     if(volume < 1 || volume > 10) throw new Error(constants.ERRORMESSAGES.AM_INVALID_VOLUME);
     const player = globals[channel.id].get(`connection`);
+    globals[channel.id].set(`volume`, volume / 10);
     player.volume(`${volume}/10`);
   };
   set cookie(newCookie){
