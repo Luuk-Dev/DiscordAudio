@@ -1,6 +1,6 @@
 {
   "name": "discordaudio",
-  "version": "3.0.6",
+  "version": "3.0.9",
   "description": "Play audio easily in a voice channel for your Discord.js bot. Easy documentations and easy to use.",
   "main": "index.js",
   "scripts": {
@@ -10,13 +10,13 @@
   "license": "MIT",
   "dependencies": {
     "@discordjs/opus": "^0.9.0",
-    "@discordjs/voice": "^0.15.0",
+    "@discordjs/voice": "^0.16.0",
     "ffmpeg": "^0.0.4",
     "ffmpeg-static": "^5.1.0",
-    "libsodium-wrappers": "^0.7.10",
-    "opusscript": "^0.0.8",
+    "libsodium-wrappers": "^0.7.11",
+    "opusscript": "^0.1.0",
     "valuesaver": "^1.9.3",
-    "yt-stream": "^1.4.3"
+    "yt-stream": "^1.4.8"
   },
   "keywords": [
     "audio",
