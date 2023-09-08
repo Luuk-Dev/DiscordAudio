@@ -96,7 +96,7 @@ class Player extends EventEmitter {
                 selfMute: false,
                 youtube: null,
                 audiotype: voice.StreamType.Arbitrary,
-                volume: 1
+                volume: globals[this.channel.id].get(`volume`) || 1
             };
             const yturl = ytstream.validateVideoURL(audiostream) ? true : false;
             if(options){
@@ -111,6 +111,7 @@ class Player extends EventEmitter {
                 if(typeof options.volume === 'number'){
                     if(options.volume > 1 || options.volume < 0) throw new Error(constants.ERRORMESSAGES.VOLUME_MAX);
                     settings['volume'] = options.volume;
+                    globals[this.channel.id].set(`volume`, settings['volume'] / 1);
                 }
                 settings['youtube'] = yturl;
             }
@@ -308,13 +309,15 @@ class Player extends EventEmitter {
         if(!globals[this.channel.id].get(`resource`)) return;
         if(typeof volume === "number"){
             if(volume > 10) throw new Error(constants.ERRORMESSAGES.VOLUME_MAX_10);
+            globals[this.channel.id].set(`volume`, volume / 10);
             globals[this.channel.id].get(`resource`).volume.setVolumeLogarithmic(volume / 10);
         } else {
             let volumestring = volume;
             if(!volumestring.includes("/")) volumestring += "/ 10";
             let vol = volumestring.split("/");
             if(Number(vol[0]) > Number(vol[1])) throw new Error(constants.ERRORMESSAGES.VOLUME_INVALID_HIGHER);
-            globals[this.channel.id].get(`resource`).volume.setVolumeLogarithmic(Number(vol[0]) / Number(vol[1]));
+            globals[this.channel.id].set(`volume`, parseInt(vol[0]) / parseInt(vol[1]));
+            globals[this.channel.id].get(`resource`).volume.setVolumeLogarithmic(parseInt(vol[0]) / parseInt(vol[1]));
         }
     }
     set cookie(newCookie){
