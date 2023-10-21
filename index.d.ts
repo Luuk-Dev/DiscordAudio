@@ -355,6 +355,14 @@ export declare class AudioManager{
      * audioManager.skip(<channel>);
      */
     skip(channel: VoiceChannel) : Promise<void>;
+
+    /**
+     * Plays the previous song again
+     * @param {object} channel The voice channel where you would like the previous song in
+     * @example
+     * audioManager.previous(<channel>);
+     */
+    previous(channel: VoiceChannel) : Promise<void>;
     /**
      * Shows the full queue
      * @param {object} channel The voice channel where you want to get the queue of
@@ -414,6 +422,22 @@ export declare class AudioManager{
      * audioManager.shuffle(<channel>);
      */
     shuffle(channel: VoiceChannel);
+
+    /**
+     * Gives information about the song which is currently playing
+     * @param {object} channel The voice channel where the song is being played you'd like to receive the information of
+     * @example
+     * audioManager.getCurrentSong(<channel>);
+     */
+    getCurrentSong(channel: VoiceChannel) : {url: string; title?: string | null; started: number; ytInfo?: object | null;};
+
+    /**
+     * Provides the current set volume
+     * @param channel The voice channel where you'd like to get the set volume of
+     * @example
+     * audioManager.getVolume(<channel>);
+     */
+    getVolume(channel: VoiceChannel) : number;
 
     on<T extends keyof AudioManagerEvents>(eventName: T, listener: (...args: AudioManagerEvents[T]) => void);
     once<T extends keyof AudioManagerEvents>(eventName: T, listener: (...args: AudioManagerEvents[T]) => void);
