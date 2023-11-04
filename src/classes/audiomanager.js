@@ -252,7 +252,7 @@ class AudioManager extends EventEmitter{
     const player = globals[channel.id].get(`connection`);
     return new Promise((resolve, reject) => {
       const previous = globals[channel.id].get(`previous`);
-      const previousSong = previous.length > 0 ? previous[0] : queue[0];
+      const previousSong = previous.length > 0 ? previous[previous.length - 1] : queue[0];
       if(previousSong.loopType === 2){
         if(previous.length > 0){
           queue.splice(queue.length - 1, 1);
