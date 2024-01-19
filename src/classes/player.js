@@ -4,7 +4,23 @@ const ytstream = require('yt-stream');
 const EventEmitter = require('events');
 const constants = require('../util/constants.js');
 const { ValueSaver } = require('valuesaver');
-const createStream = require('../getstream.js');
+const { URL } = require('url');
+const https = require('https');
+const http = require('http');
+const dns = require('dns');
+const { promisify } = require('util');
+const { spawn } = require('child_process');
+const { playAudio } = require('../getstream.js');
+const reqTypes = {https: https, http: http};
+const lookup = promisify(dns.lookup);
+
+let ffmpeg = true;
+
+const ffmpegCheck = spawn('ffmpeg', ['-version']);
+
+ffmpegCheck.on('error', () => {
+    ffmpeg = false;
+});
 
 const wait = (ms) => {
   return new Promise((resolve, reject) => {
@@ -14,13 +30,62 @@ const wait = (ms) => {
   });
 }
 
+const validateURL = (url) => {
+    try{
+        let u = new URL(url);
+        return u.host !== "";
+    } catch {
+        return false;
+    }
+}
+
+const validateAudio = (url) => {
+    return new Promise(async (resolve, reject) => {
+        const parsed = new URL(url);
+
+        let family = 4;
+        try{
+            let _lr = await lookup(parsed.hostname, {hints: 0});
+            family = _lr.family;
+        } catch {};
+
+        const reqType = reqTypes[parsed.protocol.split(':')[0].toLowerCase()];
+
+        const req = reqType.request({
+            host: parsed.hostname,
+            path: parsed.pathname + parsed.search,
+            headers: {},
+            method: 'GET',
+            family: family
+        }, res => {
+            if(res.statusCode >= 400){
+                return reject(`Invalid url`);
+            } else if(!res.headers['content-type'].startsWith('audio/')){
+                return reject(`Url is not an audio`);
+            }
+
+            res.on('error', err => {
+                reject(err);
+            });
+
+            resolve();
+        });
+
+        req.on('error', err => {
+            reject(err);
+        });
+
+        req.end();
+    });
+}
+
 function connect(connection){
     return new Promise(async (resolve, reject) => {
         try{
-            await voice.entersState(connection, voice.VoiceConnectionStatus.Connecting, 5e3);
             await voice.entersState(connection, voice.VoiceConnectionStatus.Ready, 30e3);
             resolve();
         } catch(error) {
+            console.log(`Unable to connect to voice channel`, error);
             connection.destroy();
             reject(error);
         }
@@ -28,6 +93,8 @@ function connect(connection){
 }
 
 const globals = {};
+
+let defaultArgs = ['-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5', '-i', '--audio-url', '-analyzeduration', '0', '-loglevel', '0', '-f', 's16le', '-ar', '48000', '-ac', '2'];
 
 class Player extends EventEmitter {
     /**
@@ -50,6 +117,7 @@ class Player extends EventEmitter {
 
         globals[this.channel.id] = new ValueSaver();
         globals[this.channel.id].set(`player`, player);
+        globals[this.channel.id].set(`filters`, []);
         
     }
     /**
@@ -91,7 +159,7 @@ class Player extends EventEmitter {
             globals[this.channel.id].set(`stream`, stream);
             const settings = {
                 autoleave: false,
-                quality: 'low',
+                quality: 'high',
                 selfDeaf: true,
                 selfMute: false,
                 youtube: null,
@@ -115,13 +183,30 @@ class Player extends EventEmitter {
                 }
                 settings['youtube'] = yturl;
             }
+            globals[this.channel.id].set(`currentOptions`, options);
 
             globals[this.channel.id].set(`settings`, settings);
             if(globals[this.channel.id].get(`settings`).youtube === false){
-                const resource = voice.createAudioResource(audiostream, {
-                    inputType: settings.audiotype,
-                    inlineVolume: true
-                });
+                let resource;
+                if(typeof stream === 'string'){
+                    if(validateURL(stream)){
+                        try{
+                            await validateAudio(stream);
+                        } catch (err){
+                            reject(err);
+                            return;
+                        }
+                        resource = voice.createAudioResource(playAudio(stream, defaultArgs, globals[this.channel.id].get(`filters`), ffmpeg), {
+                            inputType: voice.StreamType.Opus,
+                            inlineVolume: true
+                        });
+                    }
+                } else {
+                    resource = voice.createAudioResource(stream, {
+                        inputType: settings.audiotype,
+                        inlineVolume: true
+                    });
+                }
                 resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
                 globals[this.channel.id].get(`player`).play(resource);
                 globals[this.channel.id].get('player').once(voice.AudioPlayerStatus.Idle, () => {
@@ -143,37 +228,46 @@ class Player extends EventEmitter {
             } else {
                 const vidID = ytstream.getID(audiostream);
                 const yturl = `https://www.youtube.com/watch?v=${vidID}`;
-                ytstream.stream(yturl, {
-                    quality: settings.quality,
-                    type: 'audio',
-                    highWaterMark: 1048576 * 16
-                }).then(async playable_stream => {
-                    const resource = voice.createAudioResource(playable_stream.stream, {
-                        inputType: playable_stream.type,
-                        inlineVolume: true
+                
+                let playable_stream;
+                try{
+                    playable_stream = await ytstream.stream(yturl, {
+                        quality: settings.quality,
+                        type: 'audio',
+                        highWaterMark: 1048576 * 16
                     });
-                    resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
-                    globals[this.channel.id].get(`player`).play(resource);
-                    globals[this.channel.id].get('player').once(voice.AudioPlayerStatus.Idle, () => {
-                        if(!globals[this.channel.id].get(`resource`) || this.playing === false) return;
-                        globals[this.channel.id].delete(`resource`);
-                        this.emit(constants.EVENTS.AUDIO_END, audiostream);
-                        this.playing = false;
-                        if(settings['autoleave'] === true) if(voice.getVoiceConnection(this.channel.guild.id)) voice.getVoiceConnection(this.channel.guild.id).disconnect();
-                    });
-                    await voice.entersState(globals[this.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
-                    this.playing = true;
-                    if(globals[this.channel.id].get(`resource`)){
-                        var oldResource = globals[this.channel.id].get(`resource`);
-                        if(typeof oldResource.playStream !== 'undefined'){
-                            globals[this.channel.id].get(`resource`).playStream.destroy();
-                        }
-                    }
-                    globals[this.channel.id].set(`resource`, resource);
-                }).catch(err => {
+                } catch (err){
+                    console.log(err);
                     reject(constants.ERRORMESSAGES.YOUTUBE_STREAM_FAILED);
                     return;
+                }
+                const _stream = playAudio(playable_stream.url, [...defaultArgs], [...globals[this.channel.id].get(`filters`)], ffmpeg);
+                const resource = voice.createAudioResource(_stream, {
+                    inputType: voice.StreamType.Opus,
+                    inlineVolume: true
                 });
+                resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
+                globals[this.channel.id].get(`player`).play(resource);
+                globals[this.channel.id].get('player').once(voice.AudioPlayerStatus.Idle, () => {
+                    if(!globals[this.channel.id].get(`resource`) || this.playing === false) return;
+                    globals[this.channel.id].delete(`resource`);
+                    this.emit(constants.EVENTS.AUDIO_END, audiostream);
+                    this.playing = false;
+                    if(settings['autoleave'] === true) if(voice.getVoiceConnection(this.channel.guild.id)) voice.getVoiceConnection(this.channel.guild.id).disconnect();
+                });
+                try{
+                    await voice.entersState(globals[this.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
+                } catch(err){
+                    console.log(`Not ready for playing:`, err);
+                }
+                this.playing = true;
+                if(globals[this.channel.id].get(`resource`)){
+                    var oldResource = globals[this.channel.id].get(`resource`);
+                    if(typeof oldResource.playStream !== 'undefined'){
+                        globals[this.channel.id].get(`resource`).playStream.destroy();
+                    }
+                }
+                globals[this.channel.id].set(`resource`, resource);
             }
             if(!globals[this.channel.id].get(`connection`) || this.connected === false){
                 const connection = voice.joinVoiceChannel({
@@ -205,6 +299,7 @@ class Player extends EventEmitter {
                     this.removeAllListeners(constants.EVENTS.AUDIO_PLAY);
                     resolve(audiostream);
                 }).catch(err => {
+                    console.log(err);
                     this.playing = false;
                     reject(`${constants.ERRORMESSAGES.CONNECTION_FAILED} ${err}`);
                 });
@@ -319,6 +414,62 @@ class Player extends EventEmitter {
             globals[this.channel.id].set(`volume`, parseInt(vol[0]) / parseInt(vol[1]));
             globals[this.channel.id].get(`resource`).volume.setVolumeLogarithmic(parseInt(vol[0]) / parseInt(vol[1]));
         }
+    }
+    setFilter(...filters){
+        return new Promise(async (resolve, reject) => {
+            let _f = globals[this.channel.id].get(`filters`);
+            for(let i = 0; i < filters.length; i++){
+                if(Array.isArray(filters[i])){
+                    for(let z = 0; z < filters[i].length; z++){
+                        if(typeof filters[i][z] === 'string' && _f.indexOf(filters[i][z]) < 0 && defaultArgs.indexOf(filters[i][z]) < 0){
+                            _f.push(filters[i][z]);
+                        }
+                    }
+                } else if(typeof filters[i] === 'string' && _f.indexOf(filters[i]) < 0 && defaultArgs.indexOf(filters[i]) < 0){
+                    _f.push(filters[i]);
+                }
+            }
+
+            globals[this.channel.id].set(`filters`, _f);
+
+            if(this.playing === false) resolve();
+            else {
+                let currentStream = globals[this.channel.id].get(`stream`);
+                let currentOptions = globals[this.channel.id].get(`currentOptions`);
+
+                this.play(currentStream, currentOptions).then(() => resolve()).catch(reject);
+            }
+        });
+    }
+    removeFilter(...filters){
+        return new Promise(async (resolve, reject) => {
+            let _f = globals[this.channel.id].get(`filters`);
+            for(let i = 0; i < filters.length; i++){
+                let filterIndex = _f.indexOf(filters[i]);
+                if(Array.isArray(filters[i])){
+                    for(let z = 0; z < filters[i].length; z++){
+                        filterIndex = _f.indexOf(filters[i][z]);
+                        if(typeof filters[i][z] === 'string' && filterIndex >= 0){
+                            _f.splice(filterIndex, 1);
+                        }
+                    }
+                } else if(typeof filters[i] === 'string' && filterIndex >= 0){
+                    _f.splice(filterIndex, 1);
+                }
+            }
+            globals[this.channel.id].set(`filters`, _f);
+
+            if(this.playing === false) resolve();
+            else {
+                let currentStream = globals[this.channel.id].get(`stream`);
+                let currentOptions = globals[this.channel.id].get(`currentOptions`);
+
+                this.play(currentStream, currentOptions).then(() => resolve()).catch(reject);
+            }
+        });
+    }
+    getFilters(){
+        return [...globals[this.channel.id].get(`filters`)];
     }
     set cookie(newCookie){
         ytstream.cookie = newCookie;
