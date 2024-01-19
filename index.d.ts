@@ -146,6 +146,21 @@ export declare class Player {
     */
    getListeners();
    /**
+    * Adds new filter arguments for the music and restarts with playing the current song so the new filters will apply
+    * @param {Array | string} filters An array or a set of parameters of strings which represent an encoding argument
+    */
+   setFilter(...filters: [string]) : Promise<void>;
+   /**
+    * Removes one or more filters for the music and restarts with playing the current song so the new filters will apply
+    * @param {Array | string} filters An array or a set of parameters of strings which represent an encoding argument and should be removed as a filter
+    */
+   removeFilter(...filters: [string]) : Promise<void>;
+   /**
+     * Gets the current set filters for the music
+     * @returns {Array} The filter arguments which have been set
+    */
+   getFilters() : [string];
+   /**
     * Changes the volume of the song
     * @param {number | string} volume The volume of the song
     * @example
@@ -438,6 +453,21 @@ export declare class AudioManager{
      * audioManager.getVolume(<channel>);
      */
     getVolume(channel: VoiceChannel) : number;
+    /**
+     * Adds new filter arguments for the music and restarts with playing the current song so the new filters will apply
+     * @param {Array | string} filters An array or a set of parameters of strings which represent an encoding argument
+     */
+    setFilter(...filters: [string]) : Promise<void>;
+    /**
+     * Removes one or more filters for the music and restarts with playing the current song so the new filters will apply
+     * @param {Array | string} filters An array or a set of parameters of strings which represent an encoding argument and should be removed as a filter
+     */
+    removeFilter(...filters: [string]) : Promise<void>;
+    /**
+      * Gets the current set filters for the music
+      * @returns {Array} The filter arguments which have been set
+     */
+    getFilters() : [string];
 
     on<T extends keyof AudioManagerEvents>(eventName: T, listener: (...args: AudioManagerEvents[T]) => void);
     once<T extends keyof AudioManagerEvents>(eventName: T, listener: (...args: AudioManagerEvents[T]) => void);
