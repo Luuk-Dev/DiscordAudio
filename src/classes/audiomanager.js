@@ -144,6 +144,7 @@ class AudioManager extends EventEmitter{
           globals[channel.id].set(`connection`, player);
           resolve(false);
         }).catch(err => {
+          console.log(err);
           reject(err);
           this.emit(constants.EVENTS.AM_ERROR, err);
         });
@@ -401,6 +402,28 @@ class AudioManager extends EventEmitter{
     if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
     return globals[channel.id].get(`volume`) * 10;
   };
+  setFilter(channel, ...filters){
+    return new Promise((resolve, reject) => {
+      if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
+      if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
+      const player = globals[channel.id].get(`connection`);
+      player.setFilter(...filters).then(resolve).catch(reject);
+    });
+  }
+  removeFilter(channel, ...filters){
+    return new Promise((resolve, reject) => {
+      if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
+      if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
+      const player = globals[channel.id].get(`connection`);
+      player.removeFilter(...filters).then(resolve).catch(reject);
+    });
+  }
+  getFilters(channel){
+    if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
+    if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
+    const player = globals[channel.id].get(`connection`);
+    return player.getFilters();
+  }  
   set cookie(newCookie){
     ytstream.cookie = newCookie;
   };
