@@ -2,7 +2,6 @@ const voice = require('@discordjs/voice');
 const { createAdapter } = require('../adapter.js');
 const ytstream = require('yt-stream');
 const EventEmitter = require('events');
-const constants = require('../util/constants.js');
 const { ValueSaver } = require('valuesaver');
 const { URL } = require('url');
 const https = require('https');
@@ -38,6 +37,10 @@ const validateURL = (url) => {
         return false;
     }
 }
+
+const globals = {};
+
+let defaultArgs = ['-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5', '-i', '--audio-url', '-analyzeduration', '0', '-loglevel', '0', '-f', 's16le', '-ar', '48000', '-ac', '2'];
 
 const validateAudio = (url) => {
     return new Promise(async (resolve, reject) => {
@@ -92,9 +95,89 @@ function connect(connection){
     });
 }
 
-const globals = {};
+function createResource(info, player, setPlayerValue){
+    new Promise(async (resolve, reject) => {
+        if(globals[player.channel.id].get(`settings`).youtube === false){
+            let resource;
+            if(typeof info.stream === 'string'){
+                if(validateURL(info.stream)){
+                    try{
+                        await validateAudio(info.stream);
+                    } catch (err){
+                        reject(err);
+                        return;
+                    }
+                    resource = voice.createAudioResource(playAudio(info.stream, defaultArgs, globals[player.channel.id].get(`filters`), ffmpeg), {
+                        inputType: voice.StreamType.Opus,
+                        inlineVolume: true
+                    });
+                }
+            } else {
+                resource = voice.createAudioResource(info.stream, {
+                    inputType: info.settings.audiotype,
+                    inlineVolume: true
+                });
+            }
+            resource.volume.setVolumeLogarithmic(info.settings['volume'] / 1);
+            globals[player.channel.id].get(`player`).play(resource);
+            try{
+                await voice.entersState(globals[player.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
+            } catch(err) {
+                console.log(err);
+                reject();
+                return;
+            }
+            setPlayerValue('playing', true);
+            if(globals[player.channel.id].get(`resource`)){
+                var oldResource = globals[player.channel.id].get(`resource`);
+                if(typeof oldResource.playStream !== 'undefined'){
+                    globals[player.channel.id].get(`resource`).playStream.destroy();
+                }
+            }
+            globals[player.channel.id].set(`resource`, resource);
+            resolve(resource);
+        } else {
+            const vidID = ytstream.getID(info.stream);
+            const yturl = `https://www.youtube.com/watch?v=${vidID}`;
+            
+            let playable_stream;
+            try{
+                playable_stream = await ytstream.stream(yturl, {
+                    quality: info.settings.quality,
+                    type: 'audio',
+                    highWaterMark: 1048576 * 16
+                });
+            } catch (err){
+                reject(`There was an error while getting the YouTube video url: ${err}`);
+                return;
+            }
+            const _stream = playAudio(playable_stream.url, [...defaultArgs], [...globals[player.channel.id].get(`filters`)], ffmpeg);
+            const resource = voice.createAudioResource(_stream, {
+                inputType: voice.StreamType.Opus,
+                inlineVolume: true
+            });
+            resource.volume.setVolumeLogarithmic(info.settings['volume'] / 1);
 
-let defaultArgs = ['-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5', '-i', '--audio-url', '-analyzeduration', '0', '-loglevel', '0', '-f', 's16le', '-ar', '48000', '-ac', '2'];
+            globals[player.channel.id].get(`player`).play(resource);
+            try{
+                await voice.entersState(globals[player.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 10e3);
+            } catch(err){
+                console.log(err);
+                reject();
+                return;
+            }
+            setPlayerValue('playing', true);
+            if(globals[player.channel.id].get(`resource`)){
+                var oldResource = globals[player.channel.id].get(`resource`);
+                if(typeof oldResource.playStream !== 'undefined'){
+                    globals[player.channel.id].get(`resource`).playStream.destroy();
+                }
+            }
+            globals[player.channel.id].set(`resource`, resource);
+            resolve(resource);
+        }
+    });
+}
 
 class Player extends EventEmitter {
     /**
@@ -105,7 +188,7 @@ class Player extends EventEmitter {
     */
     constructor(channel){
 
-        if(channel === undefined || typeof channel === "undefined" || channel === "") throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
+        if(channel === undefined || typeof channel === "undefined" || channel === "") throw new Error(`A valid channel is required to provide as an argument`);
         super();
         this.channel = channel;
 
@@ -113,6 +196,14 @@ class Player extends EventEmitter {
             behaviors: {
                 noSubscriber: voice.NoSubscriberBehavior.Play
             }
+        });
+
+        player.once(voice.AudioPlayerStatus.Idle, () => {
+            if(!globals[channel.id].get(`resource`) || this.playing === false) return;
+            globals[channel.id].delete(`resource`);
+            this.playing = false;
+            if(globals[channel.id].get(`settings`)['autoleave'] === true) if(voice.getVoiceConnection(channel.guild.id)) voice.getVoiceConnection(channel.guild.id).disconnect();
+            this.emit(`stop`, globals[channel.id].get(`stream`));
         });
 
         globals[this.channel.id] = new ValueSaver();
@@ -138,7 +229,7 @@ class Player extends EventEmitter {
     * */
     play(stream, options){
         return new Promise(async (resolve, reject) => {
-            if(stream === undefined || typeof stream === "undefined" || stream === "") return reject(constants.ERRORMESSAGES.REQUIRED_PARAMETER_STREAM);
+            if(stream === undefined || typeof stream === "undefined" || stream === "") return reject(c`A valid channel is required to provide as an argument`);
 
             var currentResource = globals[this.channel.id].get(`resource`);
             var subscribtion = globals[this.channel.id].get(`subscription`);
@@ -155,7 +246,6 @@ class Player extends EventEmitter {
                 globals[this.channel.id].delete(`resource`);
             }
 
-            var audiostream = stream;
             globals[this.channel.id].set(`stream`, stream);
             const settings = {
                 autoleave: false,
@@ -166,7 +256,7 @@ class Player extends EventEmitter {
                 audiotype: voice.StreamType.Arbitrary,
                 volume: globals[this.channel.id].get(`volume`) || 1
             };
-            const yturl = ytstream.validateVideoURL(audiostream) ? true : false;
+            const yturl = ytstream.validateVideoURL(stream) ? true : false;
             if(options){
                 if(typeof options.autoleave === 'boolean') settings['autoleave'] = Boolean(options.autoleave);
                 if(typeof options.selfDeaf === 'boolean') settings['selfDeaf'] = Boolean(options.selfDeaf);
@@ -177,7 +267,7 @@ class Player extends EventEmitter {
                 }
                 if(typeof options.audiotype === 'string') settings['audiotype'] = options.audiotype.toLowerCase();
                 if(typeof options.volume === 'number'){
-                    if(options.volume > 1 || options.volume < 0) throw new Error(constants.ERRORMESSAGES.VOLUME_MAX);
+                    if(options.volume > 1 || options.volume < 0) throw new Error(`Please provide a number between 0-1 for the volume`);
                     settings['volume'] = options.volume;
                     globals[this.channel.id].set(`volume`, settings['volume'] / 1);
                 }
@@ -186,88 +276,15 @@ class Player extends EventEmitter {
             globals[this.channel.id].set(`currentOptions`, options);
 
             globals[this.channel.id].set(`settings`, settings);
-            if(globals[this.channel.id].get(`settings`).youtube === false){
-                let resource;
-                if(typeof stream === 'string'){
-                    if(validateURL(stream)){
-                        try{
-                            await validateAudio(stream);
-                        } catch (err){
-                            reject(err);
-                            return;
-                        }
-                        resource = voice.createAudioResource(playAudio(stream, defaultArgs, globals[this.channel.id].get(`filters`), ffmpeg), {
-                            inputType: voice.StreamType.Opus,
-                            inlineVolume: true
-                        });
-                    }
-                } else {
-                    resource = voice.createAudioResource(stream, {
-                        inputType: settings.audiotype,
-                        inlineVolume: true
-                    });
-                }
-                resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
-                globals[this.channel.id].get(`player`).play(resource);
-                globals[this.channel.id].get('player').once(voice.AudioPlayerStatus.Idle, () => {
-                    if(!globals[this.channel.id].get(`resource`) || this.playing === false) return;
-                    globals[this.channel.id].delete(`resource`);
-                    this.emit(constants.EVENTS.AUDIO_END, audiostream);
-                    this.playing = false;
-                    if(settings['autoleave'] === true) if(voice.getVoiceConnection(this.channel.guild.id)) voice.getVoiceConnection(this.channel.guild.id).disconnect();
+            try{
+                let resource = await createResource({
+                    settings: settings,
+                    stream: stream
+                }, this, (key, val) => {
+                    this[key] = val;
                 });
-                await voice.entersState(globals[this.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
-                this.playing = true;
-                if(globals[this.channel.id].get(`resource`)){
-                    var oldResource = globals[this.channel.id].get(`resource`);
-                    if(typeof oldResource.playStream !== 'undefined'){
-                        globals[this.channel.id].get(`resource`).playStream.destroy();
-                    }
-                }
-                globals[this.channel.id].set(`resource`, resource);
-            } else {
-                const vidID = ytstream.getID(audiostream);
-                const yturl = `https://www.youtube.com/watch?v=${vidID}`;
-                
-                let playable_stream;
-                try{
-                    playable_stream = await ytstream.stream(yturl, {
-                        quality: settings.quality,
-                        type: 'audio',
-                        highWaterMark: 1048576 * 16
-                    });
-                } catch (err){
-                    console.log(err);
-                    reject(constants.ERRORMESSAGES.YOUTUBE_STREAM_FAILED);
-                    return;
-                }
-                const _stream = playAudio(playable_stream.url, [...defaultArgs], [...globals[this.channel.id].get(`filters`)], ffmpeg);
-                const resource = voice.createAudioResource(_stream, {
-                    inputType: voice.StreamType.Opus,
-                    inlineVolume: true
-                });
-                resource.volume.setVolumeLogarithmic(settings['volume'] / 1);
-                globals[this.channel.id].get(`player`).play(resource);
-                globals[this.channel.id].get('player').once(voice.AudioPlayerStatus.Idle, () => {
-                    if(!globals[this.channel.id].get(`resource`) || this.playing === false) return;
-                    globals[this.channel.id].delete(`resource`);
-                    this.emit(constants.EVENTS.AUDIO_END, audiostream);
-                    this.playing = false;
-                    if(settings['autoleave'] === true) if(voice.getVoiceConnection(this.channel.guild.id)) voice.getVoiceConnection(this.channel.guild.id).disconnect();
-                });
-                try{
-                    await voice.entersState(globals[this.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
-                } catch(err){
-                    console.log(`Not ready for playing:`, err);
-                }
-                this.playing = true;
-                if(globals[this.channel.id].get(`resource`)){
-                    var oldResource = globals[this.channel.id].get(`resource`);
-                    if(typeof oldResource.playStream !== 'undefined'){
-                        globals[this.channel.id].get(`resource`).playStream.destroy();
-                    }
-                }
-                globals[this.channel.id].set(`resource`, resource);
+            } catch (err){
+                reject();
             }
             if(!globals[this.channel.id].get(`connection`) || this.connected === false){
                 const connection = voice.joinVoiceChannel({
@@ -277,7 +294,7 @@ class Player extends EventEmitter {
                     selfDeaf: settings.selfDeaf,
                     selfMute: settings.selfMute
                 });
-                connect(connection).then(() => {
+                connect(connection).then(async () => {
                     const subscribtion = connection.subscribe(globals[this.channel.id].get(`player`));
                     globals[this.channel.id].set(`subscription`, subscribtion);
                     globals[this.channel.id].set(`connection`, connection);
@@ -286,28 +303,27 @@ class Player extends EventEmitter {
                         if(this.playing === false) return;
                         this.playing = false;
                         this.connected = false;
-                        this.emit(constants.EVENTS.AUDIO_CONNECTION_DISCONNECT, this.channel.id);
+                        this.emit(`disconnect`, this.channel.id);
                     });
                     connection.on(voice.VoiceConnectionStatus.Destroyed, () => {
                         if(this.playing === false) return;
                         this.playing = false;
                         this.connected = false;
                         this.removeAllListeners(`stop`);
-                        this.emit(constants.EVENTS.AUDIO_CONNECTION_DESTROY, this.channel.id);
+                        this.emit(`destroy`, this.channel.id);
                     });
-                    this.emit(constants.EVENTS.AUDIO_PLAY, globals[this.channel.id].get(`stream`));
-                    this.removeAllListeners(constants.EVENTS.AUDIO_PLAY);
-                    resolve(audiostream);
+                    this.emit(`play`, globals[this.channel.id].get(`stream`));
+                    this.removeAllListeners(`play`);
+                    resolve(stream);
                 }).catch(err => {
-                    console.log(err);
                     this.playing = false;
-                    reject(`${constants.ERRORMESSAGES.CONNECTION_FAILED} ${err}`);
+                    reject(`There was an error while establishing a stable connection ${err}`);
                 });
             } else {
                 const subscribtion = globals[this.channel.id].get(`connection`).subscribe(globals[this.channel.id].get(`player`));
                 globals[this.channel.id].set(`subscription`, subscribtion);
-                this.emit(constants.EVENTS.AUDIO_PLAY, globals[this.channel.id].get(`stream`));
-                this.removeAllListeners(constants.EVENTS.AUDIO_PLAY);
+                this.emit(`play`, globals[this.channel.id].get(`stream`));
+                this.removeAllListeners(`play`);
                 resolve();
             }
         });
@@ -319,6 +335,11 @@ class Player extends EventEmitter {
      */
     destroy(){
         if(globals[this.channel.id].get(`connection`)) globals[this.channel.id].get(`connection`).destroy();
+        let playingStream = globals[this.channel.id].get(`playing_stream`);
+        if(playingStream){
+            playingStream.abort();
+        }
+        delete globals[this.channel.id];
     }
     /**
      * Disconnects with the voice connection.
@@ -327,6 +348,10 @@ class Player extends EventEmitter {
      */
     disconnect(){
         if(globals[this.channel.id].get(`connection`)) globals[this.channel.id].get(`connection`).disconnect();
+        let playingStream = globals[this.channel.id].get(`playing_stream`);
+        if(playingStream){
+            playingStream.abort();
+        }
     }
     /**
      * Reconnects to a voice connection.
@@ -354,7 +379,7 @@ class Player extends EventEmitter {
                 this.playing = true;
                 resolve();
             }).catch(err => {
-                reject(`${constants.ERRORMESSAGES.RECONNECT_ERROR} ${err}`);
+                reject(`There was an error while reconnecting to the channel ${err}`);
                 this.playing = false;
             });
         });
@@ -400,17 +425,17 @@ class Player extends EventEmitter {
      * player.volume(3); // Sets the volume to 3/10
      */
     volume(volume){
-        if(typeof volume !== "string" && typeof volume !== "number") throw new Error(constants.ERRORMESSAGES.INVALID_VOLUME_PARAMETER);
+        if(typeof volume !== "string" && typeof volume !== "number") throw new Error(`The volume must be a string or a number`);
         if(!globals[this.channel.id].get(`resource`)) return;
         if(typeof volume === "number"){
-            if(volume > 10) throw new Error(constants.ERRORMESSAGES.VOLUME_MAX_10);
+            if(volume > 10) throw new Error(`The maximum volume number is 10`);
             globals[this.channel.id].set(`volume`, volume / 10);
             globals[this.channel.id].get(`resource`).volume.setVolumeLogarithmic(volume / 10);
         } else {
             let volumestring = volume;
             if(!volumestring.includes("/")) volumestring += "/ 10";
             let vol = volumestring.split("/");
-            if(Number(vol[0]) > Number(vol[1])) throw new Error(constants.ERRORMESSAGES.VOLUME_INVALID_HIGHER);
+            if(Number(vol[0]) > Number(vol[1])) throw new Error(`The base volume may not be higher than the max volume`);
             globals[this.channel.id].set(`volume`, parseInt(vol[0]) / parseInt(vol[1]));
             globals[this.channel.id].get(`resource`).volume.setVolumeLogarithmic(parseInt(vol[0]) / parseInt(vol[1]));
         }
