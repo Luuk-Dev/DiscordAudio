@@ -444,7 +444,7 @@ export declare class AudioManager{
      * @example
      * audioManager.getCurrentSong(<channel>);
      */
-    getCurrentSong(channel: VoiceChannel) : {url: string; title?: string | null; started: number; ytInfo?: object | null;};
+    getCurrentSong(channel: VoiceChannel) : {url: string; title?: string | null; started: number; ytInfo?: object | null; paused: boolean; pauses: [{started: number; ended: number | null;}]};
 
     /**
      * Provides the current set volume
