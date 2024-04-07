@@ -1,14 +1,15 @@
-class AudioStream{
-    constructor(stream, url, req){
-        this.stream = stream;
-        this.req = req;
-        this.url = url;
-        this.createdAt = new Date().getTime();
+const { Readable } = require('stream');
+
+class AudioStream extends Readable{
+    constructor(ls, opus){
+        super({read(){}, highWaterMark: 1048576 * 16});
+        this.stream = ls;
+        this.opusStream = opus;
     }
     abort(){
-        if(typeof this.req !== 'undefined'){
-            this.req.destroy();
-        }
+        this.stream.destroy();
+        this.opusStream.destroy();
+        this.destroy();
     }
 }
 
