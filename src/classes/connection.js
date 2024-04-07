@@ -3,7 +3,7 @@ const EventEmitter = require('events');
 const { ValueSaver } = require('valuesaver');
 const { createAdapter } = require('../adapter.js');
 const constants = require('../util/constants.js');
-const createStream = require('../getstream.js');
+const { playAudio } = require('../getstream.js');
 const AudioStream = require('./audiostream.js');
 
 const globals = {};
@@ -17,12 +17,12 @@ async function reloadStream(channelId, options){
     var playableStream = typeof oldStream.url === 'string' ? oldStream.url : oldStream;
     if(typeof oldStream.url === 'string'){
         try {
-            playableStream = await createStream(playableStream);
+            playableStream = playAudio(playableStream);
         } catch {
             playableStream = {stream: oldStream.url, url: oldStream.url};
         }
     }
-    const resource = voice.createAudioResource(playableStream.stream, {
+    const resource = voice.createAudioResource(playableStream instanceof AudioStream ? playableStream : playableStream.stream, {
         inlineVolume: true,
         inputType: options.audiotype
     });
@@ -134,12 +134,12 @@ class Connection extends EventEmitter {
 
             var playableStream;
             try {
-                playableStream = await createStream(stream);
+                playableStream = playAudio(stream);
             } catch (error){
                 playableStream = {stream: stream, url: stream};
             }
             
-            const resource = voice.createAudioResource(playableStream.stream, {
+            const resource = voice.createAudioResource(playableStream instanceof AudioStream ? playableStream : playableStream.stream, {
                 inputType: audiotype,
                 inlineVolume: true
             });
