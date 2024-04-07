@@ -2,7 +2,7 @@ const voice = require('@discordjs/voice');
 const EventEmitter = require('events');
 const { ValueSaver } = require('valuesaver');
 const constants = require('../util/constants.js');
-const createStream = require('../getstream.js');
+const { playAudio } = require('../getstream.js');
 const AudioStream = require('./audiostream.js');
 
 const globals = {};
@@ -16,12 +16,12 @@ async function reloadStream(customId, options){
     var playableStream = typeof oldStream.url == 'string' ? oldStream.url : oldStream;
     if(typeof oldStream.url === 'string'){
         try {
-            playableStream = await createStream(playableStream);
+            playableStream = playAudio(playableStream);
         } catch(err) {
             playableStream = {stream: oldStream.url, url: oldStream.url};
         }
     }
-    const resource = voice.createAudioResource(playableStream.stream, {
+    const resource = voice.createAudioResource(playableStream instanceof AudioStream ? playableStream : playableStream.stream, {
         inlineVolume: true,
         inputType: options.audiotype
     });
@@ -89,7 +89,7 @@ class Broadcast extends EventEmitter{
         (async () => {
             var playableStream = stream;
             try{
-                playableStream = await createStream(stream);
+                playableStream = playAudio(stream);
             } catch(error) {
                 playableStream = {stream: stream, url: stream};
             }
@@ -103,7 +103,7 @@ class Broadcast extends EventEmitter{
 
             globals[id].set(`player`, player);
 
-            const resource = voice.createAudioResource(playableStream ? playableStream.stream : stream, {
+            const resource = voice.createAudioResource(playableStream instanceof AudioStream ? playableStream : (typeof playableStream === 'string' ? playableStream : playableStream.stream), {
                 inlineVolume: true,
                 inputType: audiotype
             });
