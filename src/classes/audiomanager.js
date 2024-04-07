@@ -39,21 +39,21 @@ class AudioManager extends EventEmitter{
         if(yturl === true){
             try{
               var info = await ytstream.getInfo(stream);
-              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume'], started: 0, loopType: loopType});
+              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType});
             } catch {
-              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, loopType: loopType});
+              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType});
             }
         } else if(playlisturl === true){
           try{
             var playlist = await ytstream.getPlaylist(stream);
             var playlistInfo = playlist.videos.map(v => {
-              return {url: v.video_url, quality: settings['quality'], audiotype: settings['audiotype'], info: v, volume: settings['volume'], started: 0, loopType: loopType};
+              return {url: v.video_url, quality: settings['quality'], audiotype: settings['audiotype'], info: v, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType};
             });
             queue.push(...playlistInfo);
           } catch {
             reject(`The parsed url is an invalid playlist url`);              
           }
-        } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, loopType: loopType});
+        } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType});
         if(globals[channel.id] instanceof ValueSaver){
           globals[channel.id].set(`queue`, queue);
           this.emit(constants.EVENTS.AM_QUEUE_ADD, stream);
@@ -77,21 +77,21 @@ class AudioManager extends EventEmitter{
         if(yturl === true){
             try{
                 var info = await ytstream.getInfo(stream);
-              	queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume'], started: 0, loopType: 0});
+              	queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: 0});
             } catch {
-              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, loopType: 0});                
+              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: 0});                
             }
         } else if(playlisturl === true){
           try{
               var playlist = await ytstream.getPlaylist(stream);
               var playlistInfo = playlist.videos.map(v => {
-                return {url: v.video_url, quality: settings['quality'], audiotype: settings['audiotype'], info: v, volume: settings['volume'], started: 0, loopType: 0};
+                return {url: v.video_url, quality: settings['quality'], audiotype: settings['audiotype'], info: v, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: 0};
               });
               queue.push(...playlistInfo);
           } catch {
             reject(`The parsed url is an invalid playlist url`);              
           }
-        } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, loopType: 0});
+        } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: 0});
         queue[0].started = (new Date()).getTime();
         globals[channel.id].set(`queue`, queue);
         player.play(queue[0].url, {
@@ -115,6 +115,8 @@ class AudioManager extends EventEmitter{
             }
             else if(globals[channel.id].get(`loop`) === 2){
               queue[0].started = 0;
+              queue[0].pauses = [];
+              queue[0].paused = false;
               queue.push(queue[0]);
               previous.push(queue[0]);
               queue.shift();
@@ -214,6 +216,8 @@ class AudioManager extends EventEmitter{
         });
       } else if(globals[channel.id].get(`loop`) === 2){
         queue[0].started = 0;
+        queue[0].pauses = [];
+        queue[0].paused = false;
         previous.push(queue[0]);
         globals[channel.id].set(`previous`, previous);
         queue.push(queue[0]);
@@ -314,12 +318,24 @@ class AudioManager extends EventEmitter{
     if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
     if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
     const player = globals[channel.id].get(`connection`);
+    const queue = globals[channel.id].get(`queue`);
+    if(!queue[0].paused){
+      queue[0].paused = true;
+      queue[0].pauses.push({started: (new Date()).getTime(), ended: null});
+      globals[channel.id].set(`queue`, queue);
+    }
     player.pause();
   };
   resume(channel){
     if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
     if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
     const player = globals[channel.id].get(`connection`);
+    const queue = globals[channel.id].get(`queue`);
+    if(queue[0].paused){
+      queue[0].paused = false;
+      queue[0].pauses[0].ended = (new Date()).getTime();
+      globals[channel.id].set(`queue`, queue);
+    }
     player.resume();
   }
   queue(channel){
@@ -394,7 +410,9 @@ class AudioManager extends EventEmitter{
       url: firstSong.url,
       title: firstSong.info ? firstSong.info.title : null,
       started: firstSong.started,
-      ytInfo: firstSong.info ?? null
+      ytInfo: firstSong.info ?? null,
+      paused: firstSong.paused,
+      pauses: [...firstSong.pauses]
     };
   };
   getVolume(channel){
@@ -407,7 +425,14 @@ class AudioManager extends EventEmitter{
       if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
       if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
       const player = globals[channel.id].get(`connection`);
-      player.setFilter(...filters).then(resolve).catch(reject);
+      player.setFilter(...filters).then(() => {
+        const queue = globals[channel.id].get(`queue`);
+        queue[0].started = (new Date()).getTime();
+        queue[0].paused = false;
+        queue[0].pauses = [];
+        globals[channel.id].set(`queue`, queue);
+        resolve();
+      }).catch(reject);
     });
   }
   removeFilter(channel, ...filters){
@@ -415,7 +440,14 @@ class AudioManager extends EventEmitter{
       if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
       if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
       const player = globals[channel.id].get(`connection`);
-      player.removeFilter(...filters).then(resolve).catch(reject);
+      player.removeFilter(...filters).then(() => {
+        const queue = globals[channel.id].get(`queue`);
+        queue[0].started = (new Date()).getTime();
+        queue[0].paused = false;
+        queue[0].pauses = [];
+        globals[channel.id].set(`queue`, queue);
+        resolve();
+      }).catch(reject);
     });
   }
   getFilters(channel){
