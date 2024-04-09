@@ -198,7 +198,7 @@ class Player extends EventEmitter {
             }
         });
 
-        player.once(voice.AudioPlayerStatus.Idle, () => {
+        player.on(voice.AudioPlayerStatus.Idle, () => {
             if(!globals[channel.id].get(`resource`) || this.playing === false) return;
             globals[channel.id].delete(`resource`);
             this.playing = false;
@@ -242,8 +242,10 @@ class Player extends EventEmitter {
                     this.playing = false;
                 }
                 if(currentResource.audioPlayer){
-                    currentResource.audioPlayer.stop(true);
-                    currentResource.audioPlayer.destroy();
+                    try{
+                        currentResource.audioPlayer.stop(true);
+                        currentResource.audioPlayer.destroy();
+                    } catch {}
                 }
                 globals[this.channel.id].delete(`resource`);
             }
