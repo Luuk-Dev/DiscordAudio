@@ -241,8 +241,10 @@ class Player extends EventEmitter {
                 if(this.playing === true){
                     this.playing = false;
                 }
-                currentResource.audioPlayer.stop(true);
-                currentResource.playStream.destroy();
+                if(currentResource.audioPlayer){
+                    currentResource.audioPlayer.stop(true);
+                    currentResource.audioPlayer.destroy();
+                }
                 globals[this.channel.id].delete(`resource`);
             }
 
