@@ -199,11 +199,13 @@ class Player extends EventEmitter {
         });
 
         player.on(voice.AudioPlayerStatus.Idle, () => {
-            if(!globals[channel.id].get(`resource`) || this.playing === false) return;
-            globals[channel.id].delete(`resource`);
+            if(globals[channel.id] instanceof ValueSaver){
+                if(!globals[channel.id].get(`resource`) || this.playing === false) return;
+                globals[channel.id].delete(`resource`);
+                if(globals[channel.id].get(`settings`)['autoleave'] === true) if(voice.getVoiceConnection(channel.guild.id)) voice.getVoiceConnection(channel.guild.id).disconnect();
+                this.emit(`stop`, globals[channel.id].get(`stream`));
+            }
             this.playing = false;
-            if(globals[channel.id].get(`settings`)['autoleave'] === true) if(voice.getVoiceConnection(channel.guild.id)) voice.getVoiceConnection(channel.guild.id).disconnect();
-            this.emit(`stop`, globals[channel.id].get(`stream`));
         });
 
         globals[this.channel.id] = new ValueSaver();
@@ -343,7 +345,6 @@ class Player extends EventEmitter {
         if(playingStream){
             playingStream.abort();
         }
-        delete globals[this.channel.id];
     }
     /**
      * Disconnects with the voice connection.
