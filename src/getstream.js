@@ -1,6 +1,5 @@
 const { spawn } = require('child_process');
 const prism = require('prism-media');
-const AudioStream = require('./classes/audiostream.js');
 
 const playAudio = (url, standardFilters = [], customFilters = [], ffmpeg) => {
     if(!ffmpeg) return url;
@@ -16,14 +15,14 @@ const playAudio = (url, standardFilters = [], customFilters = [], ffmpeg) => {
     
     const opus = new prism.opus.Encoder({ rate: 48000, channels: 2, frameSize: 960 });
 
-    const readable = new AudioStream(ls, opus);
-
-    ls.stdout.on('data', data => {
-        readable.push(data);
+    opus.on('close', () => {
+        ls.kill('SIGKILL');
+        ls = null;
+        opus.destroy();
     });
-
-    readable.pipe(opus);
     
+    ls.stdout.pipe(opus);
+
     return opus;
 }
 
