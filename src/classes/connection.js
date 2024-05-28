@@ -4,16 +4,13 @@ const { ValueSaver } = require('valuesaver');
 const { createAdapter } = require('../adapter.js');
 const constants = require('../util/constants.js');
 const { playAudio } = require('../getstream.js');
-const AudioStream = require('./audiostream.js');
+const prism = require('prism-media');
 
 const globals = {};
 
 async function reloadStream(channelId, options){
     const player = globals[channelId].get(`player`);
     const oldStream = globals[channelId].get(`stream`);
-    if(oldStream instanceof AudioStream){
-        oldStream.abort();
-    }
     var playableStream = typeof oldStream.url === 'string' ? oldStream.url : oldStream;
     if(typeof oldStream.url === 'string'){
         try {
@@ -22,7 +19,7 @@ async function reloadStream(channelId, options){
             playableStream = {stream: oldStream.url, url: oldStream.url};
         }
     }
-    const resource = voice.createAudioResource(playableStream instanceof AudioStream ? playableStream : playableStream.stream, {
+    const resource = voice.createAudioResource(playableStream instanceof prism.opus.Encoder ? playableStream : playableStream.stream, {
         inlineVolume: true,
         inputType: options.audiotype
     });
@@ -139,7 +136,7 @@ class Connection extends EventEmitter {
                 playableStream = {stream: stream, url: stream};
             }
             
-            const resource = voice.createAudioResource(playableStream instanceof AudioStream ? playableStream : playableStream.stream, {
+            const resource = voice.createAudioResource(playableStream instanceof prism.opus.Encoder ? playableStream : playableStream.stream, {
                 inputType: audiotype,
                 inlineVolume: true
             });
