@@ -22,7 +22,6 @@ constantexports.EVENTS = {
   AM_QUEUE_ADD: 'queue_add',
   AM_QUEUE_REMOVE: 'queue_remove',
   AM_END: 'end',
-  AM_ERROR: 'error',
   AM_DESTROY: 'destroy',
   AM_CONNECTION_DESTROY: 'connection_destroy'
 };
