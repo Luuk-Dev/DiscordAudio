@@ -3,16 +3,13 @@ const EventEmitter = require('events');
 const { ValueSaver } = require('valuesaver');
 const constants = require('../util/constants.js');
 const { playAudio } = require('../getstream.js');
-const AudioStream = require('./audiostream.js');
+const prism = require('prism-media');
 
 const globals = {};
 
 async function reloadStream(customId, options){
     const player = globals[customId].get(`player`);
     const oldStream = globals[customId].get(`stream`);
-    if(oldStream instanceof AudioStream){
-        oldStream.abort();
-    }
     var playableStream = typeof oldStream.url == 'string' ? oldStream.url : oldStream;
     if(typeof oldStream.url === 'string'){
         try {
@@ -21,7 +18,7 @@ async function reloadStream(customId, options){
             playableStream = {stream: oldStream.url, url: oldStream.url};
         }
     }
-    const resource = voice.createAudioResource(playableStream instanceof AudioStream ? playableStream : playableStream.stream, {
+    const resource = voice.createAudioResource(playableStream instanceof prism.opus.Encoder ? playableStream : playableStream.stream, {
         inlineVolume: true,
         inputType: options.audiotype
     });
@@ -103,7 +100,7 @@ class Broadcast extends EventEmitter{
 
             globals[id].set(`player`, player);
 
-            const resource = voice.createAudioResource(playableStream instanceof AudioStream ? playableStream : (typeof playableStream === 'string' ? playableStream : playableStream.stream), {
+            const resource = voice.createAudioResource(playableStream instanceof prism.opus.Encoder ? playableStream : (typeof playableStream === 'string' ? playableStream : playableStream.stream), {
                 inlineVolume: true,
                 inputType: audiotype
             });
@@ -154,10 +151,6 @@ class Broadcast extends EventEmitter{
      * broadcast.destroy();
      */
     destroy(){
-        const stream = globals[this.id].get(`stream`);
-        if(stream instanceof AudioStream){
-            stream.abort();
-        }
         globals[this.id].get(`player`).removeAllListeners();
         globals[this.id].get(`resource`).playStream.destroy();
     }
