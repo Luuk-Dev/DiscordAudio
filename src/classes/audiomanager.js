@@ -460,13 +460,7 @@ class AudioManager extends EventEmitter{
     if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
     const player = globals[channel.id].get(`connection`);
     return player.getFilters();
-  }  
-  set cookie(newCookie){
-    ytstream.cookie = newCookie;
-  };
-  get cookie(){
-    return ytstream.cookie;
-  };
+  }
 };
 
 module.exports = {AudioManager};
