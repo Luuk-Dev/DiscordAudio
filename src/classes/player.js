@@ -110,16 +110,16 @@ function createResource(info, player, setPlayerValue){
                     const _stream = playAudio(info.stream, defaultArgs, globals[player.channel.id].get(`filters`), ffmpeg);
                     resource = voice.createAudioResource(_stream, {
                         inputType: voice.StreamType.Opus,
-                        inlineVolume: true
+                        inlineVolume: ffmpeg
                     });
                 }
             } else {
                 resource = voice.createAudioResource(info.stream, {
                     inputType: info.settings.audiotype,
-                    inlineVolume: true
+                    inlineVolume: ffmpeg
                 });
             }
-            resource.volume.setVolumeLogarithmic(info.settings['volume'] / 1);
+            if(ffmpeg) resource.volume.setVolumeLogarithmic(info.settings['volume'] / 1);
             globals[player.channel.id].get(`player`).play(resource);
             try{
                 await voice.entersState(globals[player.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 10e3);
@@ -145,22 +145,29 @@ function createResource(info, player, setPlayerValue){
                 playable_stream = await ytstream.stream(yturl, {
                     quality: info.settings.quality,
                     type: 'audio',
-                    highWaterMark: 1048576 * 16
+                    highWaterMark: 1048576 * 16,
+                    download: !ffmpeg
                 });
             } catch (err){
                 reject(`There was an error while getting the YouTube video url: ${err}`);
                 return;
             }
-            const _stream = playAudio(playable_stream.url, [...defaultArgs], [...globals[player.channel.id].get(`filters`)], ffmpeg);
+            let _stream;
+            if(ffmpeg){
+                _stream = playAudio(playable_stream.url, [...defaultArgs], [...globals[player.channel.id].get(`filters`)], ffmpeg);
+            } else {
+                _stream = playable_stream.stream;
+            }
             const resource = voice.createAudioResource(_stream, {
-                inputType: voice.StreamType.Opus,
-                inlineVolume: true
+                inputType: ffmpeg ? voice.StreamType.Opus : (playable_stream.type === "webm/opus" ? voice.StreamType.WebmOpus : voice.StreamType.Arbitrary),
+                inlineVolume: ffmpeg
             });
-            resource.volume.setVolumeLogarithmic(info.settings['volume'] / 1);
+            
+            if(ffmpeg) resource.volume.setVolumeLogarithmic(info.settings['volume'] / 1);
 
             globals[player.channel.id].get(`player`).play(resource);
             try{
-                await voice.entersState(globals[player.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 10e3);
+                await voice.entersState(globals[player.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
             } catch(err){
                 reject(err);
                 return;
@@ -212,7 +219,7 @@ class Player extends EventEmitter {
     constructor(channel, options){
 
         if(channel === undefined || typeof channel === "undefined" || channel === "") throw new Error(`A valid channel is required to provide as an argument`);
-        if(typeof options !== 'object' || object === null || Array.isArray(options)) options = {};
+        if(typeof options !== 'object' || options === null || Array.isArray(options)) options = {};
         super();
         if(options.ffmpeg === false){
             ffmpeg = false;
@@ -445,6 +452,7 @@ class Player extends EventEmitter {
      * player.volume(3); // Sets the volume to 3/10
      */
     volume(volume){
+        if(ffmpeg === false) return false;
         if(typeof volume !== "string" && typeof volume !== "number") throw new Error(`The volume must be a string or a number`);
         if(!globals[this.channel.id].get(`resource`)) return;
         if(typeof volume === "number"){
