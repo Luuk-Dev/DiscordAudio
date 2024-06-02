@@ -7,8 +7,15 @@ const { ValueSaver } = require('valuesaver');
 var globals = {};
 
 class AudioManager extends EventEmitter{
-  constructor(){
+  constructor(options){
     super();
+    if(typeof options !== 'object' || Array.isArray(options) || options === null) options = {};
+    this.ffmpeg = true;
+    if(typeof options.ffmpeg === 'boolean'){
+      if(options.ffmpeg === false){
+        this.ffmpeg = false;
+      }
+    } 
   }
   play(channel, stream, options){
     if(!channel || !stream) throw new Error(constants.ERRORMESSAGES.AM_REQUIRED_PARAMETERS);
@@ -56,7 +63,7 @@ class AudioManager extends EventEmitter{
         } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType});
         if(globals[channel.id] instanceof ValueSaver){
           globals[channel.id].set(`queue`, queue);
-          this.emit(constants.EVENTS.AM_QUEUE_ADD, stream);
+          this.emit(`queue_add`, stream);
           resolve(true);
         } else {
           this.play(channel, stream, options).then(resolve).catch(reject);
@@ -72,7 +79,9 @@ class AudioManager extends EventEmitter{
 
         var queue = globals[channel.id].get(`queue`);
 
-        const player = new Player(channel);
+        const player = new Player(channel, {
+          ffmpeg: Boolean(this.ffmpeg)
+        });
         
         if(yturl === true){
             try{
@@ -102,7 +111,7 @@ class AudioManager extends EventEmitter{
           quality: settings['quality'],
           volume: globals[channel.id].get(`volume`) || (settings['volume'] / 10)
         }).then(() => {
-          this.emit(constants.EVENTS.AM_PLAY, channel, stream);
+          this.emit(`play`, channel, stream);
 
           player.on('stop', () => {
             if(!(globals[channel.id] instanceof ValueSaver)) return;
@@ -112,8 +121,7 @@ class AudioManager extends EventEmitter{
               queue[0].started = 0;
               previous.push(queue[0]);
               queue.shift();
-            }
-            else if(globals[channel.id].get(`loop`) === 2){
+            } else if(globals[channel.id].get(`loop`) === 2){
               queue[0].started = 0;
               queue[0].pauses = [];
               queue[0].paused = false;
@@ -130,31 +138,27 @@ class AudioManager extends EventEmitter{
                 audiotype: queue[0].audiotype,
                 quality: queue[0].quality,
                 volume: globals[channel.id].get(`volume`) || (settings['volume'] / 10)
-              }).catch(err => {
-                this.emit(constants.EVENTS.AM_ERROR, err);
-              });
+              }).catch(err => {});
 
               globals[channel.id].set(`queue`, queue);
               globals[channel.id].set(`previous`, previous);
             } else {
               player.destroy();
               globals[channel.id] = undefined;
-              this.emit(constants.EVENTS.AM_END, channel);
+              this.emit(`end`, channel);
             }
           });
 
           globals[channel.id].set(`connection`, player);
           resolve(false);
         }).catch(err => {
-          console.log(err);
           reject(err);
-          this.emit(constants.EVENTS.AM_ERROR, err);
         });
 
         player.once(constants.EVENTS.AUDIO_CONNECTION_DISCONNECT, (channelId) => { 
-          globals[channelId].get(`connection`).destroy();
-          this.emit(constants.EVENTS.AM_CONNECTION_DESTROY, channel);
-          globals[channelId] = undefined;
+          if(globals[channelId].get(`connection`)) globals[channelId].get(`connection`).destroy();
+          this.emit(`connection_destroy`, channel);
+          delete globals[channelId];
         });
       }
     });
@@ -183,7 +187,7 @@ class AudioManager extends EventEmitter{
     if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
     if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
     globals[channel.id].get(`connection`).destroy();
-    this.emit(constants.EVENTS.AM_CONNECTION_DESTROY, channel);
+    this.emit(`connection_destroy`, channel);
     globals[channel.id] = undefined;
   };
   skip(channel){
@@ -365,7 +369,7 @@ class AudioManager extends EventEmitter{
       if(index >= 0){
         queue.splice(index, 1);
         resolve();
-        this.emit(constants.EVENTS.AM_QUEUE_REMOVE, stream);
+        this.emit(`queue_remove`, stream);
       } else return reject(constants.ERRORMESSAGES.DELETE_QUEUE_SONG_NOT_EXISTS);
     });
   };
@@ -390,9 +394,10 @@ class AudioManager extends EventEmitter{
       globals[global].get(`connection`).destroy();
     }
     globals = {};
-    this.emit(constants.EVENTS.AM_DESTROY);
+    this.emit(`destroy`);
   };
   volume(channel, volume){
+    if(this.ffmpeg === false) return false;
     if(!channel || !volume) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETERS_VOLUME);
     if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
     if(isNaN(volume)) throw new Error(constants.ERRORMESSAGES.AM_NAN_VOLUME);
