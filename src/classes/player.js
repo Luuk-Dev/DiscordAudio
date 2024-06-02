@@ -524,12 +524,6 @@ class Player extends EventEmitter {
     getFilters(){
         return [...globals[this.channel.id].get(`filters`)];
     }
-    set cookie(newCookie){
-        ytstream.cookie = newCookie;
-    }
-    get cookie(){
-        return ytstream.cookie;
-    }
 };
 
 module.exports = {Player};
