@@ -5,6 +5,14 @@ type QualityOptions = 'high' | 'low';
 
 type AudioTypeOptions = 'arbitrary' | 'raw' | 'ogg/opus' | 'webm/opus' | 'opus';
 
+type PlayerOptions = {
+    ffmpeg: boolean;
+};
+
+type AudioManagerOptions = {
+    ffmpeg: boolean;
+};
+
 type StreamPlayOptions = {
   autoleave: boolean;
   quality: QualityOptions;
@@ -60,7 +68,6 @@ interface AudioManagerEvents {
     queue_add: [StreamTypes];
     queue_remove: [StreamTypes];
     end: [void];
-    error: [Error];
     destroy: [void];
     connection_destroy: [VoiceChannel];
 }
@@ -79,7 +86,7 @@ export declare class Player {
     * @example
     * const player = new Player(<channel>);
     */
-  constructor(channel: VoiceChannel);
+  constructor(channel: VoiceChannel, options: PlayerOptions);
   /**
     * To play a song in a voice channel.
     * @param {string | object} stream The stream to play in the voice channel.
@@ -322,7 +329,7 @@ export declare class AudioManager{
      * @example
      * const audioManager = new AudioManager();
      */
-    constructor();
+    constructor(options: AudioManagerOptions);
     /**
      * Plays a song in a voice channel or adds it to the queue
      * @param {object} channel The voice channel where the bot needs to play the song
@@ -444,7 +451,7 @@ export declare class AudioManager{
      * @example
      * audioManager.getCurrentSong(<channel>);
      */
-    getCurrentSong(channel: VoiceChannel) : {url: string; title?: string | null; started: number; ytInfo?: object | null; paused: boolean; pauses: [{started: number; ended: number | null;}]};
+    getCurrentSong(channel: VoiceChannel) : {url: string; title?: string | null; started: number; ytInfo?: object | null; paused: boolean; pauses: [{started: number; ended: number | null;}]; loop: number;};
 
     /**
      * Provides the current set volume
