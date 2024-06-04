@@ -38,6 +38,7 @@ class AudioManager extends EventEmitter{
 
     return new Promise(async (resolve, reject) => {
       if(globals[channel.id] instanceof ValueSaver){
+        globals[channel.id].set(`started`, false);
         if(typeof options.volume === 'number'){
           globals[channel.id].set(`volume`, options.volume / 10);
         }
@@ -73,6 +74,7 @@ class AudioManager extends EventEmitter{
         globals[channel.id].set(`queue`, []);
         globals[channel.id].set(`previous`, []);
         globals[channel.id].set(`loop`, 0);
+        globals[channel.id].set(`started`, true);
         if(typeof options.volume === 'number'){
           globals[channel.id].set(`volume`, options.volume / 10);
         }
@@ -152,6 +154,7 @@ class AudioManager extends EventEmitter{
           globals[channel.id].set(`connection`, player);
           resolve(false);
         }).catch(err => {
+          if(globals[channel.id].get(`started`) === true) delete globals[channel.id];
           reject(err);
         });
 
@@ -263,6 +266,7 @@ class AudioManager extends EventEmitter{
       const previous = globals[channel.id].get(`previous`);
       const previousSong = previous.length > 0 ? previous[previous.length - 1] : queue[0];
       previousSong.started = (new Date()).getTime();
+      previousSong.pauses = [];
       if(previousSong.loopType === 2){
         if(previous.length > 0){
           queue.splice(queue.length - 1, 1);
