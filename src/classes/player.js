@@ -146,7 +146,7 @@ function createResource(info, player, setPlayerValue){
                     quality: info.settings.quality,
                     type: 'audio',
                     highWaterMark: 1048576 * 16,
-                    download: !ffmpeg
+                    download: true
                 });
             } catch (err){
                 reject(`There was an error while getting the YouTube video url: ${err}`);
