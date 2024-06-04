@@ -417,7 +417,8 @@ class AudioManager extends EventEmitter{
       started: firstSong.started,
       ytInfo: firstSong.info ?? null,
       paused: firstSong.paused,
-      pauses: [...firstSong.pauses]
+      pauses: [...firstSong.pauses],
+      loop: globals[channel.id].get(`loop`)
     };
   };
   getVolume(channel){
