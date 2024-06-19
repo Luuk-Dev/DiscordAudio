@@ -2,6 +2,7 @@ const { Player } = require('./player.js');
 const EventEmitter = require('events');
 const constants = require('../util/constants.js');
 const ytstream = require('yt-stream');
+const soundcloud = require('sc-play');
 const { ValueSaver } = require('valuesaver');
 
 var globals = {};
@@ -34,6 +35,7 @@ class AudioManager extends EventEmitter{
       if(typeof options.volume === 'number') settings['volume'] = options.volume;
     } else options = {};
     const yturl = ytstream.validateVideoURL(stream);
+    const scurl = soundcloud.validateSoundCloudURL(stream);
     const playlisturl = ytstream.validatePlaylistURL(stream);
 
     return new Promise(async (resolve, reject) => {
@@ -47,9 +49,9 @@ class AudioManager extends EventEmitter{
         if(yturl === true){
             try{
               var info = await ytstream.getInfo(stream);
-              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType});
+              queue.push({url: info.url, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType});
             } catch {
-              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType});
+              queue.push({url: info.url, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType});
             }
         } else if(playlisturl === true){
           try{
@@ -60,6 +62,14 @@ class AudioManager extends EventEmitter{
             queue.push(...playlistInfo);
           } catch {
             reject(`The parsed url is an invalid playlist url`);              
+          }
+        } else if(scurl === true){
+          try{
+            var info = await soundcloud.getInfo(stream);
+            if(info.type !== 'track') return reject(`SoundCloud url is not a track`);
+            queue.push({url: info.url, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType});
+          } catch {
+            queue.push({url: info.url, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType});
           }
         } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType});
         if(globals[channel.id] instanceof ValueSaver){
@@ -88,10 +98,18 @@ class AudioManager extends EventEmitter{
         if(yturl === true){
             try{
                 var info = await ytstream.getInfo(stream);
-              	queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: 0});
+              	queue.push({url: info.url, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: 0});
             } catch {
-              queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: 0});                
+              queue.push({url: info.url, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: 0});                
             }
+        } else if(scurl === true){
+          try{
+            var info = await soundcloud.getInfo(stream);
+            if(info.type !== 'track') return reject(`SoundCloud url is not a track`);
+            queue.push({url: info.url, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: 0});
+          } catch {
+            queue.push({url: info.url, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: 0});
+          }
         } else if(playlisturl === true){
           try{
               var playlist = await ytstream.getPlaylist(stream);
@@ -419,7 +437,7 @@ class AudioManager extends EventEmitter{
       url: firstSong.url,
       title: firstSong.info ? firstSong.info.title : null,
       started: firstSong.started,
-      ytInfo: firstSong.info ?? null,
+      info: firstSong.info ?? null,
       paused: firstSong.paused,
       pauses: [...firstSong.pauses],
       loop: globals[channel.id].get(`loop`)
