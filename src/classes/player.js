@@ -42,7 +42,7 @@ const validateURL = (url) => {
 const globals = {};
 
 let connectionArgs = ['-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5'];
-let defaultArgs = ['-i', '--audio-url', '-analyzeduration', '0', '-loglevel', '0', '-f', 's16le', '-ar', '48000', '-ac', '2'];
+let defaultArgs = ['-analyzeduration', '0', '-loglevel', '0', '-f', 's16le', '-ar', '48000', '-ac', '2'];
 
 const validateAudio = (url) => {
     return new Promise(async (resolve, reject) => {
@@ -156,7 +156,7 @@ function createResource(info, player, setPlayerValue){
             }
             let _stream;
             if(ffmpeg){
-                _stream = playAudio(playable_stream.url, [...connectionArgs, ...defaultArgs], [...globals[player.channel.id].get(`filters`)], ffmpeg);
+                _stream = playAudio(playable_stream.stream, [...connectionArgs, ...defaultArgs], [...globals[player.channel.id].get(`filters`)], ffmpeg);
             } else {
                 _stream = playable_stream.stream;
             }
