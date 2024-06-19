@@ -17,13 +17,7 @@ const playAudio = (url, standardFilters = [], customFilters = [], ffmpeg) => {
     }
 
     if(typeof url === 'string'){
-        const iFilter = standardFilters.filter(f => f === "--audio-url")[0];
-        if(!iFilter) throw new Error('Invalid filters');
-        const indexFilter = standardFilters.indexOf(iFilter);
-        standardFilters[indexFilter] = url;
-    } else {
-        const indexInput = standardFilters.indexOf('--audio-url');
-        if(indexInput >= 0) standardFilters[indexInput] = "-";
+        standardFilters.push('-i', url);
     }
 
     let custom = ['-af', customFilters.join(',')];
