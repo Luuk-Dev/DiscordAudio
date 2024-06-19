@@ -1,6 +1,7 @@
 const voice = require('@discordjs/voice');
 const { createAdapter } = require('../adapter.js');
 const ytstream = require('yt-stream');
+const scplay = require('sc-play');
 const EventEmitter = require('events');
 const { ValueSaver } = require('valuesaver');
 const { URL } = require('url');
@@ -40,7 +41,8 @@ const validateURL = (url) => {
 
 const globals = {};
 
-let defaultArgs = ['-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5', '-i', '--audio-url', '-analyzeduration', '0', '-loglevel', '0', '-f', 's16le', '-ar', '48000', '-ac', '2'];
+let connectionArgs = ['-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5'];
+let defaultArgs = ['-i', '--audio-url', '-analyzeduration', '0', '-loglevel', '0', '-f', 's16le', '-ar', '48000', '-ac', '2'];
 
 const validateAudio = (url) => {
     return new Promise(async (resolve, reject) => {
@@ -97,7 +99,7 @@ function connect(connection){
 
 function createResource(info, player, setPlayerValue){
     return new Promise(async (resolve, reject) => {
-        if(globals[player.channel.id].get(`settings`).youtube === false){
+        if(globals[player.channel.id].get(`settings`).youtube === false && globals[player.channel.id].get(`settings`).soundcloud === false){
             let resource;
             if(typeof info.stream === 'string'){
                 if(validateURL(info.stream)){
@@ -136,7 +138,7 @@ function createResource(info, player, setPlayerValue){
             }
             globals[player.channel.id].set(`resource`, resource);
             resolve(resource);
-        } else {
+        } else if(globals[player.channel.id].get(`settings`).youtube === true) {
             const vidID = ytstream.getID(info.stream);
             const yturl = `https://www.youtube.com/watch?v=${vidID}`;
             
@@ -154,7 +156,7 @@ function createResource(info, player, setPlayerValue){
             }
             let _stream;
             if(ffmpeg){
-                _stream = playAudio(playable_stream.url, [...defaultArgs], [...globals[player.channel.id].get(`filters`)], ffmpeg);
+                _stream = playAudio(playable_stream.url, [...connectionArgs, ...defaultArgs], [...globals[player.channel.id].get(`filters`)], ffmpeg);
             } else {
                 _stream = playable_stream.stream;
             }
@@ -163,6 +165,42 @@ function createResource(info, player, setPlayerValue){
                 inlineVolume: ffmpeg
             });
             
+            if(ffmpeg) resource.volume.setVolumeLogarithmic(info.settings['volume'] / 1);
+
+            globals[player.channel.id].get(`player`).play(resource);
+            try{
+                await voice.entersState(globals[player.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
+            } catch(err){
+                reject(err);
+                return;
+            }
+            setPlayerValue('playing', true);
+            if(globals[player.channel.id].get(`resource`)){
+                var oldResource = globals[player.channel.id].get(`resource`);
+                if(typeof oldResource.playStream !== 'undefined'){
+                    globals[player.channel.id].get(`resource`).playStream.destroy();
+                }
+            }
+            globals[player.channel.id].set(`resource`, resource);
+            resolve(resource);
+        } else if(globals[player.channel.id].get(`settings`).soundcloud === true) {
+            let playableStream;
+            try{
+                playableStream = await scplay.stream(info.stream, {
+                    download: true,
+                    highWaterMark: 1048576 * 16
+                });
+            } catch (err){
+                return reject(`There was an error while downloading the SoundCloud track: ${err}`);
+            }
+
+            let _stream = playAudio(playableStream.stream, [...defaultArgs], [...globals[player.channel.id].get(`filters`)], ffmpeg);
+
+            const resource = voice.createAudioResource(_stream, {
+                inputType: ffmpeg ? voice.StreamType.Opus : voice.StreamType.Arbitrary,
+                inlineVolume: ffmpeg
+            });
+
             if(ffmpeg) resource.volume.setVolumeLogarithmic(info.settings['volume'] / 1);
 
             globals[player.channel.id].get(`player`).play(resource);
@@ -217,7 +255,6 @@ class Player extends EventEmitter {
     * const player = new Player(<channel>);
     */
     constructor(channel, options){
-
         if(channel === undefined || typeof channel === "undefined" || channel === "") throw new Error(`A valid channel is required to provide as an argument`);
         if(typeof options !== 'object' || options === null || Array.isArray(options)) options = {};
         super();
@@ -257,7 +294,7 @@ class Player extends EventEmitter {
                 globals[this.channel.id].set(`player`, createPlayer(this.channel.id, this.channel.guild.id, this));
                 globals[this.channel.id].set(`filters`, []);
             }
-            if(stream === undefined || typeof stream === "undefined" || stream === "") return reject(c`A valid channel is required to provide as an argument`);
+            if(stream === undefined || typeof stream === "undefined" || stream === "") return reject(`A valid channel is required to provide as an argument`);
 
             var currentResource = globals[this.channel.id].get(`resource`);
             var subscribtion = globals[this.channel.id].get(`subscription`);
@@ -289,6 +326,7 @@ class Player extends EventEmitter {
                 volume: globals[this.channel.id].get(`volume`) || 1
             };
             const yturl = ytstream.validateVideoURL(stream) ? true : false;
+            const soundcloudurl = scplay.validateSoundCloudURL(stream);
             if(options){
                 if(typeof options.autoleave === 'boolean') settings['autoleave'] = Boolean(options.autoleave);
                 if(typeof options.selfDeaf === 'boolean') settings['selfDeaf'] = Boolean(options.selfDeaf);
@@ -304,6 +342,7 @@ class Player extends EventEmitter {
                     globals[this.channel.id].set(`volume`, settings['volume'] / 1);
                 }
                 settings['youtube'] = yturl;
+                settings['soundcloud'] = soundcloudurl;
             }
             globals[this.channel.id].set(`currentOptions`, options);
 
@@ -317,6 +356,7 @@ class Player extends EventEmitter {
                 });
             } catch (err){
                 reject(err);
+                return;
             }
             if(!globals[this.channel.id].get(`connection`) || this.connected === false){
                 const connection = voice.joinVoiceChannel({
