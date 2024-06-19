@@ -109,7 +109,7 @@ function createResource(info, player, setPlayerValue){
                         reject(err);
                         return;
                     }
-                    const _stream = playAudio(info.stream, defaultArgs, globals[player.channel.id].get(`filters`), ffmpeg);
+                    const _stream = playAudio(info.stream, [...connectionArgs, ...defaultArgs], globals[player.channel.id].get(`filters`), ffmpeg);
                     resource = voice.createAudioResource(_stream, {
                         inputType: voice.StreamType.Opus,
                         inlineVolume: ffmpeg
@@ -156,7 +156,7 @@ function createResource(info, player, setPlayerValue){
             }
             let _stream;
             if(ffmpeg){
-                _stream = playAudio(playable_stream.stream, [...connectionArgs, ...defaultArgs], [...globals[player.channel.id].get(`filters`)], ffmpeg);
+                _stream = playAudio(playable_stream.stream, [...defaultArgs], [...globals[player.channel.id].get(`filters`)], ffmpeg);
             } else {
                 _stream = playable_stream.stream;
             }
