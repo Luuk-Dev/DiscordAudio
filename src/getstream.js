@@ -1,52 +1,44 @@
-const { Readable } = require('stream');
-const prism = require('prism-media');
+const { Readable, PassThrough, Duplex } = require('stream');
+const { spawn } = require('child_process');
 
 const playAudio = (url, standardFilters = [], customFilters = [], ffmpeg) => {
     if(!ffmpeg){
-        if(url instanceof Readable){
-            const opus = new prism.opus.Encoder({ rate: 48000, channels: 2, frameSize: 960 });
-
-            opus.on('close', () => {
-                opus.destroy();
-            });
-
-            url.on('error', err => opus.emit('error', err));
-
-            return url.pipe(opus);
-        } else return url;
+        return url;
     }
-
+    
+    let audioIndex = standardFilters.indexOf('-i');
     if(typeof url === 'string'){
-        standardFilters.push('-i', url);
+        standardFilters.splice(audioIndex + 1, 0, url);
+    } else {
+        standardFilters.splice(audioIndex + 1, 0, 'pipe:0');
     }
 
     let custom = ['-af', customFilters.join(',')];
 
-    let ffmpegArgs = [...standardFilters, ...(customFilters.length > 0 ? custom : [])];
-    if(typeof url === 'string') ffmpegArgs.push('pipe:1');
-    let ls = new prism.FFmpeg({
-        args: [...standardFilters, ...(customFilters.length > 0 ? custom : [])]
-    });
+    let ffmpegArgs = [...standardFilters, ...(customFilters.length > 0 ? custom : []), 'pipe:1'];
 
-    let output = ls;
+    let ls = spawn('ffmpeg', ffmpegArgs);
 
-    if(url instanceof Readable){
-        output = url.pipe(ls);
+    if(url instanceof Readable || url instanceof PassThrough || url instanceof Duplex){
+        url.pipe(ls.stdin);
     }
-    
-    const opus = new prism.opus.Encoder({ rate: 48000, channels: 2, frameSize: 960 });
-    
-    const outputPipe = output.pipe(opus);
 
-    output.on('error', err => outputPipe.emit('error', err));
+    const readable = new Readable({highWaterMark: 1048576 * 16, read(){}});
+    const readableDuplicate = new Readable({highWaterMark: 1048576 * 16, read(){}});
 
-    opus.on('close', () => {
-        ls.destroy();
-        ls = null;
-        opus.destroy();
+    ls.stdout.on('data', chunk => {
+        readable.push(chunk);
+        readableDuplicate.push(chunk);
     });
 
-    return outputPipe;
+    ls.stdout.on('end', () => {
+        readable.push(null);
+        readableDuplicate.push(null);
+        ls.kill('SIGKILL');
+        ls = null;
+    });
+
+    return {stream: readable, duplicate: readableDuplicate};
 }
 
 module.exports = { playAudio };
