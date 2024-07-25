@@ -1,5 +1,6 @@
 import { VoiceChannel } from "discord.js";
 import { Broadcast } from "./src/classes/broadcast";
+import { Readable } from "stream";
 
 type QualityOptions = 'high' | 'low';
 
@@ -67,9 +68,13 @@ interface AudioManagerEvents {
     play: [VoiceChannel, StreamTypes];
     queue_add: [StreamTypes];
     queue_remove: [StreamTypes];
-    end: [void];
+    end: [VoiceChannel];
+    stop: [VoiceChannel];
+    pause: [VoiceChannel];
+    resume: [VoiceChannel];
     destroy: [void];
     connection_destroy: [VoiceChannel];
+    loop: [VoiceChannel, number];
 }
 
 type ConnectionOptions = {
@@ -167,6 +172,11 @@ export declare class Player {
      * @returns {Array} The filter arguments which have been set
     */
    getFilters() : [string];
+   /**
+    * Returns the stream which is being played in the voice channel
+    * @returns {Readable | string} The stream which is being played
+    */
+   getStream() : {stream: Readable | string, mimeType?: string; ffmpeg: boolean;};
    /**
     * Changes the volume of the song
     * @param {number | string} volume The volume of the song
@@ -462,19 +472,40 @@ export declare class AudioManager{
     getVolume(channel: VoiceChannel) : number;
     /**
      * Adds new filter arguments for the music and restarts with playing the current song so the new filters will apply
+     * @param channel The voice channel where you'd like to add a new filter
      * @param {Array | string} filters An array or a set of parameters of strings which represent an encoding argument
      */
-    setFilter(...filters: [string]) : Promise<void>;
+    setFilter(channel: VoiceChannel, ...filters: [string]) : Promise<void>;
     /**
      * Removes one or more filters for the music and restarts with playing the current song so the new filters will apply
+     * @param channel The voice channel where you'd like to remove a filter from
      * @param {Array | string} filters An array or a set of parameters of strings which represent an encoding argument and should be removed as a filter
      */
-    removeFilter(...filters: [string]) : Promise<void>;
+    removeFilter(channel: VoiceChannel, ...filters: [string]) : Promise<void>;
     /**
       * Gets the current set filters for the music
+      * @param channel The voice channel where you'd like to receive the filters from
       * @returns {Array} The filter arguments which have been set
      */
-    getFilters() : [string];
+    getFilters(channel: VoiceChannel) : [string];
+
+    /**
+     * Returns the stream which is being played
+     * @param channel The voice channel where you'd like to get the stream of
+     */
+    getStream(channel: VoiceChannel) : {stream: Readable | string; mimeType?: string; ffmpeg: boolean;};
+
+    /**
+     * Returns a boolean which defines whether the bot is playing in the voice channel or not
+     * @param channel The voice channel which you'd like to check the playing status of
+     */
+    isPlaying(channel: VoiceChannel) : boolean;
+
+    /**
+     * Returns all channel id's of the voice channels where the bot is playing in
+     * @returns {Array} The channel id's
+     */
+    getPlayers() : [string];
 
     on<T extends keyof AudioManagerEvents>(eventName: T, listener: (...args: AudioManagerEvents[T]) => void);
     once<T extends keyof AudioManagerEvents>(eventName: T, listener: (...args: AudioManagerEvents[T]) => void);
