@@ -11,6 +11,8 @@ const dns = require('dns');
 const { promisify } = require('util');
 const { spawn } = require('child_process');
 const { playAudio } = require('../getstream.js');
+const createStream = require('../createstream.js');
+const { Readable, PassThrough, Duplex } = require('stream');
 const reqTypes = {https: https, http: http};
 const lookup = promisify(dns.lookup);
 
@@ -42,7 +44,15 @@ const validateURL = (url) => {
 const globals = {};
 
 let connectionArgs = ['-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5'];
-let defaultArgs = ['-analyzeduration', '0', '-loglevel', '0', '-f', 's16le', '-ar', '48000', '-ac', '2'];
+let defaultArgs = [
+    '-analyzeduration', '0',
+    '-loglevel', '0',
+    '-i',
+    '-c:a', 'libopus',
+    '-f', 'ogg',
+    '-ar', '48000',
+    '-ac', '2'
+];
 
 const validateAudio = (url) => {
     return new Promise(async (resolve, reject) => {
@@ -109,17 +119,51 @@ function createResource(info, player, setPlayerValue){
                         reject(err);
                         return;
                     }
-                    const _stream = playAudio(info.stream, [...connectionArgs, ...defaultArgs], globals[player.channel.id].get(`filters`), ffmpeg);
-                    resource = voice.createAudioResource(_stream, {
-                        inputType: voice.StreamType.Opus,
-                        inlineVolume: ffmpeg
+                    let playable_stream;
+                    try{
+                        playable_stream = await createStream(info.stream);
+                    } catch(err) {
+                        return reject(err);
+                    }
+                    const _stream = playAudio(playable_stream.stream, [...defaultArgs], globals[player.channel.id].get(`filters`), ffmpeg);
+                    globals[player.channel.id].set(`playable_stream`, {stream: _stream.duplicate, mimeType: _stream.mimeType, ffmpeg: ffmpeg});
+                    if(ffmpeg){
+                        resource = voice.createAudioResource(_stream.stream, {
+                            inputType: voice.StreamType.OggOpus,
+                            inlineVolume: true
+                        });
+                    } else {
+                        try{
+                            let streamInfo = await voice.demuxProbe(_stream.stream);
+                            resource = voice.createAudioResource(streamInfo.stream, {
+                                inputType: streamInfo.type,
+                                inlineVolume: false
+                            });
+                        } catch(err) {
+                            return reject(err);
+                        }
+                    }
+                }
+            } else if(info.stream instanceof Readable || info.stream instanceof PassThrough || info.stream instanceof Duplex){
+                const _stream = playAudio(info.stream, [...defaultArgs], globals[player.channel.id].get(`filters`), ffmpeg);
+                if(ffmpeg){
+                    resource = voice.createAudioResource(_stream.stream, {
+                        inputType: voice.StreamType.OggOpus,
+                        inlineVolume: true
                     });
+                } else {
+                    try{
+                        let streamInfo = await voice.demuxProbe(_stream.stream);
+                        resource = voice.createAudioResource(streamInfo.stream, {
+                            inputType: streamInfo.type,
+                            inlineVolume: false
+                        });
+                    } catch(err) {
+                        return reject(err);
+                    }
                 }
             } else {
-                resource = voice.createAudioResource(info.stream, {
-                    inputType: info.settings.audiotype,
-                    inlineVolume: ffmpeg
-                });
+                return reject(`The stream must be a type of string or an instance of the Readable class`);
             }
             if(ffmpeg) resource.volume.setVolumeLogarithmic(info.settings['volume'] / 1);
             globals[player.channel.id].get(`player`).play(resource);
@@ -154,16 +198,25 @@ function createResource(info, player, setPlayerValue){
                 reject(`There was an error while getting the YouTube video url: ${err}`);
                 return;
             }
-            let _stream;
+            let _stream = playAudio(playable_stream.stream, [...defaultArgs], [...globals[player.channel.id].get(`filters`)], ffmpeg);
+            globals[player.channel.id].set(`playable_stream`, {stream: _stream.duplicate, mimeType: playable_stream.mimeType, ffmpeg: ffmpeg});
+            let resource;
             if(ffmpeg){
-                _stream = playAudio(playable_stream.stream, [...defaultArgs], [...globals[player.channel.id].get(`filters`)], ffmpeg);
+                resource = voice.createAudioResource(_stream.stream, {
+                    inputType: voice.StreamType.OggOpus,
+                    inlineVolume: true
+                });
             } else {
-                _stream = playable_stream.stream;
+                try{
+                    let streamInfo = await voice.demuxProbe(_stream.stream);
+                    resource = voice.createAudioResource(streamInfo.stream, {
+                        inputType: streamInfo.type,
+                        inlineVolume: false
+                    });
+                } catch(err) {
+                    return reject(err);
+                }
             }
-            const resource = voice.createAudioResource(_stream, {
-                inputType: ffmpeg ? voice.StreamType.Opus : (playable_stream.type === "webm/opus" ? voice.StreamType.WebmOpus : voice.StreamType.Arbitrary),
-                inlineVolume: ffmpeg
-            });
             
             if(ffmpeg) resource.volume.setVolumeLogarithmic(info.settings['volume'] / 1);
 
@@ -195,11 +248,25 @@ function createResource(info, player, setPlayerValue){
             }
 
             let _stream = playAudio(playableStream.stream, [...defaultArgs], [...globals[player.channel.id].get(`filters`)], ffmpeg);
+            globals[player.channel.id].set(`playable_stream`, {stream: _stream.duplicate, mimeType: playableStream.mimeType, ffmpeg: ffmpeg});
 
-            const resource = voice.createAudioResource(_stream, {
-                inputType: ffmpeg ? voice.StreamType.Opus : voice.StreamType.Arbitrary,
-                inlineVolume: ffmpeg
-            });
+            let resource;
+            if(ffmpeg){
+                resource = voice.createAudioResource(_stream.stream, {
+                    inputType: voice.StreamType.OggOpus,
+                    inlineVolume: true
+                });
+            } else {
+                try{
+                    let streamInfo = await voice.demuxProbe(_stream.stream);
+                    resource = voice.createAudioResource(streamInfo.stream, {
+                        inputType: streamInfo.type,
+                        inlineVolume: false
+                    });
+                } catch(err) {
+                    return reject(err);
+                }
+            }
 
             if(ffmpeg) resource.volume.setVolumeLogarithmic(info.settings['volume'] / 1);
 
@@ -458,6 +525,7 @@ class Player extends EventEmitter {
      */
     pause(){
         globals[this.channel.id].get(`subscription`).player.pause();
+        this.paused = true;
     }
     /**
      * Resumes a song that has been paused.
@@ -466,6 +534,7 @@ class Player extends EventEmitter {
      */
     resume(){
         globals[this.channel.id].get(`subscription`).player.unpause();
+        this.paused = false;
     }
     /**
      * Checks if the song is playable.
@@ -562,8 +631,12 @@ class Player extends EventEmitter {
         });
     }
     getFilters(){
-        return [...globals[this.channel.id].get(`filters`)];
+        return [...(globals[this.channel.id].get(`filters`) ?? [])];
     }
+    getStream(){
+        return globals[this.channel.id].get(`playable_stream`);
+    }
+    paused = false;
 };
 
 module.exports = {Player};
