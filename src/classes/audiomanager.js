@@ -1,489 +1,666 @@
-const { Player } = require('./player.js');
-const EventEmitter = require('events');
-const constants = require('../util/constants.js');
+const voice = require('@discordjs/voice');
+const { createAdapter } = require('../adapter.js');
 const ytstream = require('yt-stream');
-const soundcloud = require('sc-play');
+const scplay = require('sc-play');
+const EventEmitter = require('events');
 const { ValueSaver } = require('valuesaver');
+const { URL } = require('url');
+const https = require('https');
+const http = require('http');
+const dns = require('dns');
+const { promisify } = require('util');
+const { spawn } = require('child_process');
+const { playAudio } = require('../getstream.js');
+const createStream = require('../createstream.js');
+const { Readable, PassThrough, Duplex } = require('stream');
+const reqTypes = {https: https, http: http};
+const lookup = promisify(dns.lookup);
 
-var globals = {};
+let ffmpeg = true;
 
-class AudioManager extends EventEmitter{
-  constructor(options){
-    super();
-    if(typeof options !== 'object' || Array.isArray(options) || options === null) options = {};
-    this.ffmpeg = true;
-    if(typeof options.ffmpeg === 'boolean'){
-      if(options.ffmpeg === false){
-        this.ffmpeg = false;
-      }
-    } 
-  }
-  play(channel, stream, options){
-    if(!channel || !stream) throw new Error(constants.ERRORMESSAGES.AM_REQUIRED_PARAMETERS);
-    if(typeof channel !== 'object') throw new Error(constants.ERRORMESSAGES.INVALID_CHANNEL_PARAMETER);
-    if(typeof stream === 'undefined' || stream === undefined || stream === '') throw new Error(constants.ERRORMESSAGES.INVALID_STREAM_PARAMETER);
+const ffmpegCheck = spawn('ffmpeg', ['-version']);
 
-    const settings = {
-      quality: 'high',
-      audiotype: 'arbitrary',
-      volume: 10
-    };
+ffmpegCheck.on('error', () => {
+    ffmpeg = false;
+});
 
-    if(options){
-      if(typeof options.quality === 'string') settings['quality'] = options.quality.toLowerCase() === 'low' ? options.quality : 'high';
-      if(typeof options.audiotype === 'string') settings['audiotype'] = options.audiotype;
-      if(typeof options.volume === 'number') settings['volume'] = options.volume;
-    } else options = {};
-    const yturl = ytstream.validateVideoURL(stream);
-    const scurl = soundcloud.validateSoundCloudURL(stream);
-    const playlisturl = ytstream.validatePlaylistURL(stream);
+const wait = (ms) => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      resolve()
+    }, ms);
+  });
+}
 
+const validateURL = (url) => {
+    try{
+        let u = new URL(url);
+        return u.host !== "";
+    } catch {
+        return false;
+    }
+}
+
+const globals = {};
+
+let connectionArgs = ['-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5'];
+let defaultArgs = [
+    '-analyzeduration', '0',
+    '-loglevel', '0',
+    '-i',
+    '-c:a', 'libopus',
+    '-f', 'ogg',
+    '-ar', '48000',
+    '-ac', '2'
+];
+
+const validateAudio = (url) => {
     return new Promise(async (resolve, reject) => {
-      if(globals[channel.id] instanceof ValueSaver){
-        globals[channel.id].set(`started`, false);
-        if(typeof options.volume === 'number'){
-          globals[channel.id].set(`volume`, options.volume / 10);
-        }
-        var queue = globals[channel.id].get(`queue`);
-        let loopType = globals[channel.id].get(`loop`);
-        if(yturl === true){
-            try{
-              var info = await ytstream.getInfo(stream);
-              queue.push({url: info.url, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType});
-            } catch {
-              queue.push({url: info.url, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType});
+        const parsed = new URL(url);
+
+        let family = 4;
+        try{
+            let _lr = await lookup(parsed.hostname, {hints: 0});
+            family = _lr.family;
+        } catch {};
+
+        const reqType = reqTypes[parsed.protocol.split(':')[0].toLowerCase()];
+
+        const req = reqType.request({
+            host: parsed.hostname,
+            path: parsed.pathname + parsed.search,
+            headers: {},
+            method: 'GET',
+            family: family
+        }, res => {
+            if(res.statusCode >= 400){
+                return reject(`Invalid url`);
+            } else if(!res.headers['content-type'].startsWith('audio/')){
+                return reject(`Url is not an audio`);
             }
-        } else if(playlisturl === true){
-          try{
-            var playlist = await ytstream.getPlaylist(stream);
-            var playlistInfo = playlist.videos.map(v => {
-              return {url: v.video_url, quality: settings['quality'], audiotype: settings['audiotype'], info: v, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType};
+
+            res.on('error', err => {
+                reject(err);
             });
-            queue.push(...playlistInfo);
-          } catch {
-            reject(`The parsed url is an invalid playlist url`);              
-          }
-        } else if(scurl === true){
-          try{
-            var info = await soundcloud.getInfo(stream);
-            if(info.type !== 'track') return reject(`SoundCloud url is not a track`);
-            queue.push({url: info.url, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType});
-          } catch {
-            queue.push({url: info.url, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType});
-          }
-        } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: loopType});
-        if(globals[channel.id] instanceof ValueSaver){
-          globals[channel.id].set(`queue`, queue);
-          this.emit(`queue_add`, stream);
-          resolve(true);
-        } else {
-          this.play(channel, stream, options).then(resolve).catch(reject);
-        }
-      } else {
-        globals[channel.id] = new ValueSaver();
-        globals[channel.id].set(`queue`, []);
-        globals[channel.id].set(`previous`, []);
-        globals[channel.id].set(`loop`, 0);
-        globals[channel.id].set(`started`, true);
-        if(typeof options.volume === 'number'){
-          globals[channel.id].set(`volume`, options.volume / 10);
-        }
 
-        var queue = globals[channel.id].get(`queue`);
-
-        const player = new Player(channel, {
-          ffmpeg: Boolean(this.ffmpeg)
+            resolve();
         });
-        
-        if(yturl === true){
-            try{
-                var info = await ytstream.getInfo(stream);
-              	queue.push({url: info.url, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: 0});
-            } catch {
-              queue.push({url: info.url, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: 0});                
-            }
-        } else if(scurl === true){
-          try{
-            var info = await soundcloud.getInfo(stream);
-            if(info.type !== 'track') return reject(`SoundCloud url is not a track`);
-            queue.push({url: info.url, quality: settings['quality'], audiotype: settings['audiotype'], info: info, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: 0});
-          } catch {
-            queue.push({url: info.url, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: 0});
-          }
-        } else if(playlisturl === true){
-          try{
-              var playlist = await ytstream.getPlaylist(stream);
-              var playlistInfo = playlist.videos.map(v => {
-                return {url: v.video_url, quality: settings['quality'], audiotype: settings['audiotype'], info: v, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: 0};
-              });
-              queue.push(...playlistInfo);
-          } catch {
-            reject(`The parsed url is an invalid playlist url`);              
-          }
-        } else queue.push({url: stream, quality: settings['quality'], audiotype: settings['audiotype'], info: undefined, volume: settings['volume'], started: 0, paused: false, pauses: [], loopType: 0});
-        queue[0].started = (new Date()).getTime();
-        globals[channel.id].set(`queue`, queue);
-        player.play(queue[0].url, {
-          autoleave: false,
-          selfDeaf: true,
-          selfMute: false,
-          audiotype: settings['audiotype'],
-          quality: settings['quality'],
-          volume: globals[channel.id].get(`volume`) || (settings['volume'] / 10)
-        }).then(() => {
-          this.emit(`play`, channel, stream);
 
-          player.on('stop', () => {
-            if(!(globals[channel.id] instanceof ValueSaver)) return;
-            queue = globals[channel.id].get(`queue`);
-            let previous = globals[channel.id].get(`previous`);
-            if(globals[channel.id].get(`loop`) === 0){
-              queue[0].started = 0;
-              previous.push(queue[0]);
-              queue.shift();
-            } else if(globals[channel.id].get(`loop`) === 2){
-              queue[0].started = 0;
-              queue[0].pauses = [];
-              queue[0].paused = false;
-              queue.push(queue[0]);
-              previous.push(queue[0]);
-              queue.shift();
+        req.on('error', err => {
+            reject(err);
+        });
+
+        req.end();
+    });
+}
+
+function connect(connection){
+    return new Promise(async (resolve, reject) => {
+        try{
+            await voice.entersState(connection, voice.VoiceConnectionStatus.Ready, 30e3);
+            resolve();
+        } catch(error) {
+            console.log(`Unable to connect to voice channel`, error);
+            connection.destroy();
+            reject(error);
+        }
+    });
+}
+
+function createResource(info, player, setPlayerValue){
+    return new Promise(async (resolve, reject) => {
+        if(globals[player.channel.id].get(`settings`).youtube === false && globals[player.channel.id].get(`settings`).soundcloud === false){
+            let resource;
+            if(typeof info.stream === 'string'){
+                if(validateURL(info.stream)){
+                    try{
+                        await validateAudio(info.stream);
+                    } catch (err){
+                        reject(err);
+                        return;
+                    }
+                    let playable_stream;
+                    try{
+                        playable_stream = await createStream(info.stream);
+                    } catch(err) {
+                        return reject(err);
+                    }
+                    const _stream = playAudio(playable_stream.stream, [...defaultArgs], globals[player.channel.id].get(`filters`), ffmpeg);
+                    globals[player.channel.id].set(`playable_stream`, {stream: _stream.duplicate, mimeType: _stream.mimeType, ffmpeg: ffmpeg});
+                    if(ffmpeg){
+                        resource = voice.createAudioResource(_stream.stream, {
+                            inputType: voice.StreamType.OggOpus,
+                            inlineVolume: true
+                        });
+                    } else {
+                        try{
+                            let streamInfo = await voice.demuxProbe(_stream.stream);
+                            resource = voice.createAudioResource(streamInfo.stream, {
+                                inputType: streamInfo.type,
+                                inlineVolume: false
+                            });
+                        } catch(err) {
+                            return reject(err);
+                        }
+                    }
+                }
+            } else if(info.stream instanceof Readable || info.stream instanceof PassThrough || info.stream instanceof Duplex){
+                const _stream = playAudio(info.stream, [...defaultArgs], globals[player.channel.id].get(`filters`), ffmpeg);
+                if(ffmpeg){
+                    resource = voice.createAudioResource(_stream.stream, {
+                        inputType: voice.StreamType.OggOpus,
+                        inlineVolume: true
+                    });
+                } else {
+                    try{
+                        let streamInfo = await voice.demuxProbe(_stream.stream);
+                        resource = voice.createAudioResource(streamInfo.stream, {
+                            inputType: streamInfo.type,
+                            inlineVolume: false
+                        });
+                    } catch(err) {
+                        return reject(err);
+                    }
+                }
+            } else {
+                return reject(`The stream must be a type of string or an instance of the Readable class`);
             }
-            if(queue.length > 0){
-              queue[0].started = (new Date()).getTime();
-              player.play(queue[0].url, {
+            if(ffmpeg) resource.volume.setVolumeLogarithmic(info.settings['volume'] / 1);
+            globals[player.channel.id].get(`player`).play(resource);
+            try{
+                await voice.entersState(globals[player.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 10e3);
+            } catch(err) {
+                reject(err);
+                return;
+            }
+            setPlayerValue('playing', true);
+            if(globals[player.channel.id].get(`resource`)){
+                var oldResource = globals[player.channel.id].get(`resource`);
+                if(typeof oldResource.playStream !== 'undefined'){
+                    globals[player.channel.id].get(`resource`).playStream.destroy();
+                }
+            }
+            globals[player.channel.id].set(`resource`, resource);
+            resolve(resource);
+        } else if(globals[player.channel.id].get(`settings`).youtube === true) {
+            const vidID = ytstream.getID(info.stream);
+            const yturl = `https://www.youtube.com/watch?v=${vidID}`;
+            
+            let playable_stream;
+            try{
+                playable_stream = await ytstream.stream(yturl, {
+                    quality: info.settings.quality,
+                    type: 'audio',
+                    highWaterMark: 1048576 * 16,
+                    download: true
+                });
+            } catch (err){
+                reject(`There was an error while getting the YouTube video url: ${err}`);
+                return;
+            }
+            let _stream = playAudio(playable_stream.stream, [...defaultArgs], [...globals[player.channel.id].get(`filters`)], ffmpeg);
+            globals[player.channel.id].set(`playable_stream`, {stream: _stream.duplicate, mimeType: playable_stream.mimeType, ffmpeg: ffmpeg});
+            let resource;
+            if(ffmpeg){
+                resource = voice.createAudioResource(_stream.stream, {
+                    inputType: voice.StreamType.OggOpus,
+                    inlineVolume: true
+                });
+            } else {
+                try{
+                    let streamInfo = await voice.demuxProbe(_stream.stream);
+                    resource = voice.createAudioResource(streamInfo.stream, {
+                        inputType: streamInfo.type,
+                        inlineVolume: false
+                    });
+                } catch(err) {
+                    return reject(err);
+                }
+            }
+            
+            if(ffmpeg) resource.volume.setVolumeLogarithmic(info.settings['volume'] / 1);
+
+            globals[player.channel.id].get(`player`).play(resource);
+            try{
+                await voice.entersState(globals[player.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
+            } catch(err){
+                reject(err);
+                return;
+            }
+            setPlayerValue('playing', true);
+            if(globals[player.channel.id].get(`resource`)){
+                var oldResource = globals[player.channel.id].get(`resource`);
+                if(typeof oldResource.playStream !== 'undefined'){
+                    globals[player.channel.id].get(`resource`).playStream.destroy();
+                }
+            }
+            globals[player.channel.id].set(`resource`, resource);
+            resolve(resource);
+        } else if(globals[player.channel.id].get(`settings`).soundcloud === true) {
+            let playableStream;
+            try{
+                playableStream = await scplay.stream(info.stream, {
+                    download: true,
+                    highWaterMark: 1048576 * 16
+                });
+            } catch (err){
+                return reject(`There was an error while downloading the SoundCloud track: ${err}`);
+            }
+
+            let _stream = playAudio(playableStream.stream, [...defaultArgs], [...globals[player.channel.id].get(`filters`)], ffmpeg);
+            globals[player.channel.id].set(`playable_stream`, {stream: _stream.duplicate, mimeType: playableStream.mimeType, ffmpeg: ffmpeg});
+
+            let resource;
+            if(ffmpeg){
+                resource = voice.createAudioResource(_stream.stream, {
+                    inputType: voice.StreamType.OggOpus,
+                    inlineVolume: true
+                });
+            } else {
+                try{
+                    let streamInfo = await voice.demuxProbe(_stream.stream);
+                    resource = voice.createAudioResource(streamInfo.stream, {
+                        inputType: streamInfo.type,
+                        inlineVolume: false
+                    });
+                } catch(err) {
+                    return reject(err);
+                }
+            }
+
+            if(ffmpeg) resource.volume.setVolumeLogarithmic(info.settings['volume'] / 1);
+
+            globals[player.channel.id].get(`player`).play(resource);
+            try{
+                await voice.entersState(globals[player.channel.id].get(`player`), voice.AudioPlayerStatus.Playing, 5e3);
+            } catch(err){
+                reject(err);
+                return;
+            }
+            setPlayerValue('playing', true);
+            if(globals[player.channel.id].get(`resource`)){
+                var oldResource = globals[player.channel.id].get(`resource`);
+                if(typeof oldResource.playStream !== 'undefined'){
+                    globals[player.channel.id].get(`resource`).playStream.destroy();
+                }
+            }
+            globals[player.channel.id].set(`resource`, resource);
+            resolve(resource);
+        }
+    });
+}
+
+function idleCallback(channelId, guildId, playerC){
+    if(globals[channelId] instanceof ValueSaver){
+        if(!globals[channelId].get(`resource`) || playerC.playing === false) return;
+        globals[channelId].delete(`resource`);
+        if(globals[channelId].get(`settings`)['autoleave'] === true) if(voice.getVoiceConnection(guildId)) voice.getVoiceConnection(guildId).disconnect();
+        playerC.playing = false;
+        playerC.emit(`stop`, globals[channelId].get(`stream`));
+    }
+}
+
+function createPlayer(channelId, guildId, playerC){
+    const player = voice.createAudioPlayer({
+        behaviors: {
+            noSubscriber: voice.NoSubscriberBehavior.Play
+        }
+    });
+
+    player.on(voice.AudioPlayerStatus.Idle, () => {
+        idleCallback(channelId, guildId, playerC);
+    });
+
+    return player;
+}
+
+class Player extends EventEmitter {
+    /**
+    * Creates a music player to play your songs in
+    * @param {object} channel The channel to play music in
+    * @example
+    * const player = new Player(<channel>);
+    */
+    constructor(channel, options){
+        if(channel === undefined || typeof channel === "undefined" || channel === "") throw new Error(`A valid channel is required to provide as an argument`);
+        if(typeof options !== 'object' || options === null || Array.isArray(options)) options = {};
+        super();
+        if(options.ffmpeg === false){
+            ffmpeg = false;
+        }
+        this.channel = channel;
+        this.destroyed = false;
+
+        const player = createPlayer(this.channel.id, this.channel.guild.id, this);
+
+        globals[this.channel.id] = new ValueSaver();
+        globals[this.channel.id].set(`player`, player);
+        globals[this.channel.id].set(`filters`, []);
+        
+    }
+    /**
+    * To play a song in a voice channel.
+    * @param {string} stream The stream to play in the voice channel.
+    * @param {object} options Optional options.
+    * @returns {Promise<string>} Returns an error if the connection failed.
+    * 
+    * @example
+    * player.play('https://www.youtube.com/watch?v=dQw4w9WgXcQ', {
+    *     autoleave: true,
+    *     quality: 'high',
+    *     selfDeaf: true,
+    *     selfMute: false
+    * })
+    * .then(() => console.log(`Playing the song`))
+    * .catch(console.error);
+    * */
+    play(stream, options){
+        return new Promise(async (resolve, reject) => {
+            if(!globals[this.channel.id]){
+                globals[this.channel.id] = new ValueSaver();
+                globals[this.channel.id].set(`player`, createPlayer(this.channel.id, this.channel.guild.id, this));
+                globals[this.channel.id].set(`filters`, []);
+            }
+            if(stream === undefined || typeof stream === "undefined" || stream === "") return reject(`A valid channel is required to provide as an argument`);
+
+            var currentResource = globals[this.channel.id].get(`resource`);
+            var subscribtion = globals[this.channel.id].get(`subscription`);
+            if(subscribtion){
+                subscribtion.unsubscribe();
+                globals[this.channel.id].delete(`subscription`);
+            }
+            if(currentResource){
+                if(this.playing === true){
+                    this.playing = false;
+                }
+                if(currentResource.audioPlayer){
+                    try{
+                        currentResource.audioPlayer.stop(true);
+                        currentResource.audioPlayer.destroy();
+                    } catch {}
+                }
+                globals[this.channel.id].delete(`resource`);
+            }
+
+            globals[this.channel.id].set(`stream`, stream);
+            const settings = {
                 autoleave: false,
+                quality: 'high',
                 selfDeaf: true,
                 selfMute: false,
-                audiotype: queue[0].audiotype,
-                quality: queue[0].quality,
-                volume: globals[channel.id].get(`volume`) || (settings['volume'] / 10)
-              }).catch(err => {});
-
-              globals[channel.id].set(`queue`, queue);
-              globals[channel.id].set(`previous`, previous);
-            } else {
-              player.destroy();
-              globals[channel.id] = undefined;
-              this.emit(`end`, channel);
+                youtube: null,
+                audiotype: voice.StreamType.Arbitrary,
+                volume: globals[this.channel.id].get(`volume`) || 1
+            };
+            const yturl = ytstream.validateVideoURL(stream) ? true : false;
+            const soundcloudurl = scplay.validateSoundCloudURL(stream);
+            if(options){
+                if(typeof options.autoleave === 'boolean') settings['autoleave'] = Boolean(options.autoleave);
+                if(typeof options.selfDeaf === 'boolean') settings['selfDeaf'] = Boolean(options.selfDeaf);
+                if(typeof options.selfMute === 'boolean') settings['selfMute'] = Boolean(options.selfMute);
+                if(typeof options.quality === 'string'){
+                    var qu = options.quality.toLowerCase() === 'high' ? 1000 : 0;
+                    settings['quality'] = qu;
+                }
+                if(typeof options.audiotype === 'string') settings['audiotype'] = options.audiotype.toLowerCase();
+                if(typeof options.volume === 'number'){
+                    if(options.volume > 1 || options.volume < 0) throw new Error(`Please provide a number between 0-1 for the volume`);
+                    settings['volume'] = options.volume;
+                    globals[this.channel.id].set(`volume`, settings['volume'] / 1);
+                }
+                settings['youtube'] = yturl;
+                settings['soundcloud'] = soundcloudurl;
             }
-          });
+            globals[this.channel.id].set(`currentOptions`, options);
 
-          globals[channel.id].set(`connection`, player);
-          resolve(false);
-        }).catch(err => {
-          if(globals[channel.id].get(`started`) === true) delete globals[channel.id];
-          reject(err);
+            globals[this.channel.id].set(`settings`, settings);
+            try{
+                await createResource({
+                    settings: settings,
+                    stream: stream
+                }, this, (key, val) => {
+                    this[key] = val;
+                });
+            } catch (err){
+                reject(err);
+                return;
+            }
+            if(!globals[this.channel.id].get(`connection`) || this.connected === false){
+                const connection = voice.joinVoiceChannel({
+                    channelId: this.channel.id,
+                    guildId: this.channel.guild.id,
+                    adapterCreator: createAdapter(this.channel),
+                    selfDeaf: settings.selfDeaf,
+                    selfMute: settings.selfMute
+                });
+                connect(connection).then(async () => {
+                    const subscribtion = connection.subscribe(globals[this.channel.id].get(`player`));
+                    globals[this.channel.id].set(`subscription`, subscribtion);
+                    globals[this.channel.id].set(`connection`, connection);
+                    this.connected = true;
+                    connection.on(voice.VoiceConnectionStatus.Disconnected, () => {
+                        if(this.playing === false) return;
+                        this.playing = false;
+                        this.connected = false;
+                        this.emit(`disconnect`, this.channel.id);
+                    });
+                    connection.on(voice.VoiceConnectionStatus.Destroyed, () => {
+                        if(this.playing === false) return;
+                        this.playing = false;
+                        this.connected = false;
+                        this.removeAllListeners(`stop`);
+                        this.emit(`destroy`, this.channel.id);
+                    });
+                    this.emit(`play`, globals[this.channel.id].get(`stream`));
+                    this.removeAllListeners(`play`);
+                    resolve(stream);
+                }).catch(err => {
+                    this.playing = false;
+                    reject(`There was an error while establishing a stable connection ${err}`);
+                });
+            } else {
+                const subscribtion = globals[this.channel.id].get(`connection`).subscribe(globals[this.channel.id].get(`player`));
+                globals[this.channel.id].set(`subscription`, subscribtion);
+                this.emit(`play`, globals[this.channel.id].get(`stream`));
+                this.removeAllListeners(`play`);
+                resolve();
+            }
         });
+    }
+    /**
+     * Destroys the voice connection.
+     * @example
+     * player.destroy();
+     */
+    destroy(){
+        this.destroyed = true;
+        if(globals[this.channel.id].get(`connection`)) globals[this.channel.id].get(`connection`).destroy();
+        idleCallback(this.channel.id, this.channel.guild.id, this);
+        delete globals[this.channel.id];
+    }
+    /**
+     * Disconnects with the voice connection.
+     * @example
+     * player.disconnect();
+     */
+    disconnect(){
+        if(globals[this.channel.id].get(`connection`)) globals[this.channel.id].get(`connection`).disconnect();
+        idleCallback(this.channel.id, this.channel.guild.id, this);
+    }
+    /**
+     * Reconnects to a voice connection.
+     * @param {number} timeout How many miliseconds the bot needs to wait before connecting to the voice connection again. Default is 2000 miliseconds.
+     * @returns {Promise} Returns an error if the connection failed
+     * @example
+     * player.reconnect(3000)
+     *   .then(() => console.log(`Successfully reconnected`))
+     *   .catch(console.error);
+     */
+    reconnect(timeout){
+        return new Promise(async (resolve, reject) => {
+            globals[this.channel.id].get(`connection`).destroy();
+            await wait(timeout || 2000);
+            const connection = voice.joinVoiceChannel({
+                channelId: this.channel.id,
+                guildId: this.channel.guild.id,
+                adapterCreator: createAdapter(this.channel),
+                selfDeaf: globals[this.channel.id].get(`settings`).selfDeaf,
+                selfMute: globals[this.channel.id].get(`settings`).selfMute
+            });
+            connect(connection).then(() => {
+                globals[this.channel.id].set(`subscription`, connection.subscribe(globals[this.channel.id].get(`player`)));
+                globals[this.channel.id].set(`connection`, connection);
+                this.playing = true;
+                resolve();
+            }).catch(err => {
+                reject(`There was an error while reconnecting to the channel ${err}`);
+                this.playing = false;
+            });
+        });
+    }
+    /**
+     * Pauses the song that's playing.
+     * @example
+     * player.pause();
+     */
+    pause(){
+        globals[this.channel.id].get(`subscription`).player.pause();
+        this.paused = true;
+    }
+    /**
+     * Resumes a song that has been paused.
+     * @example
+     * player.resume();
+     */
+    resume(){
+        globals[this.channel.id].get(`subscription`).player.unpause();
+        this.paused = false;
+    }
+    /**
+     * Checks if the song is playable.
+     * @returns {Boolean} Returns true if the song is playable, returns false if the song is not playable.
+     * @example
+     *  if(player.getStatus() === true) console.log(`The song is playable!`);
+     *  else console.log(`The song is not playable!`);
+     */
+    getStatus(){
+        return globals[this.channel.id].get(`subscription`).player.checkPlayable();
+    }
+    /**
+     * Gets the amount of members in the same voice channel with the bot
+     * @returns {number} The amount of members in the voice channel
+     */
+    getListeners(){
+        return this.channel.members.size;
+    }
+    /**
+     * Changes the volume of the song
+     * @param {number | string} volume The volume of the song
+     * @example
+     * player.volume("3/20"); // Sets the volume to 3/20
+     * player.volume(3); // Sets the volume to 3/10
+     */
+    volume(volume){
+        if(ffmpeg === false) return false;
+        if(typeof volume !== "string" && typeof volume !== "number") throw new Error(`The volume must be a string or a number`);
+        if(!globals[this.channel.id].get(`resource`)) return;
+        if(typeof volume === "number"){
+            if(volume > 10) throw new Error(`The maximum volume number is 10`);
+            globals[this.channel.id].set(`volume`, volume / 10);
+            globals[this.channel.id].get(`resource`).volume.setVolumeLogarithmic(volume / 10);
+        } else {
+            let volumestring = volume;
+            if(!volumestring.includes("/")) volumestring += "/ 10";
+            let vol = volumestring.split("/");
+            if(Number(vol[0]) > Number(vol[1])) throw new Error(`The base volume may not be higher than the max volume`);
+            globals[this.channel.id].set(`volume`, parseInt(vol[0]) / parseInt(vol[1]));
+            globals[this.channel.id].get(`resource`).volume.setVolumeLogarithmic(parseInt(vol[0]) / parseInt(vol[1]));
+        }
+    }
+    setFilter(...filters){
+        return new Promise(async (resolve, reject) => {
+            let _f = globals[this.channel.id].get(`filters`);
+            for(let i = 0; i < filters.length; i++){
+                if(Array.isArray(filters[i])){
+                    for(let z = 0; z < filters[i].length; z++){
+                        if(typeof filters[i][z] === 'string' && _f.indexOf(filters[i][z]) < 0 && defaultArgs.indexOf(filters[i][z]) < 0){
+                            _f.push(filters[i][z]);
+                        }
+                    }
+                } else if(typeof filters[i] === 'string' && _f.indexOf(filters[i]) < 0 && defaultArgs.indexOf(filters[i]) < 0){
+                    _f.push(filters[i]);
+                }
+            }
 
-        player.once(constants.EVENTS.AUDIO_CONNECTION_DISCONNECT, (channelId) => { 
-          if(globals[channelId].get(`connection`)) globals[channelId].get(`connection`).destroy();
-          this.emit(`connection_destroy`, channel);
-          delete globals[channelId];
+            globals[this.channel.id].set(`filters`, _f);
+
+            if(this.playing === false) resolve();
+            else {
+                let currentStream = globals[this.channel.id].get(`stream`);
+                let currentOptions = globals[this.channel.id].get(`currentOptions`);
+
+                this.play(currentStream, currentOptions).then(() => resolve()).catch(reject);
+            }
         });
-      }
-    });
-  };
-  loop(channel, loop){
-    if(!channel || typeof loop !== 'number') throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETERS_LOOP);
-    if(isNaN(loop)) throw new Error(constants.ERRORMESSAGES.LOOP_PARAMETER_NAN);
-    if(loop < 0 || loop > 2) throw new Error(constants.ERRORMESSAGES.LOOP_PARAMETER_INVALID);
-    if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
-    let queue = globals[channel.id].get(`queue`);
-    queue = queue.map(i => {
-      return {
-        ...i,
-        loopType: loop
-      };
-    });
-    globals[channel.id].set(`queue`, queue);
-    globals[channel.id].set(`loop`, loop);
-  };
-  looptypes = {
-    off: 0,
-    loop: 1,
-    queueloop: 2
-  };
-  stop(channel){
-    if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
-    if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
-    globals[channel.id].get(`connection`).destroy();
-    this.emit(`connection_destroy`, channel);
-    globals[channel.id] = undefined;
-  };
-  skip(channel){
-    if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
-    if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
-    const queue = globals[channel.id].get(`queue`);
-    const player = globals[channel.id].get(`connection`);
-    return new Promise((resolve, reject) => {
-      let previous = globals[channel.id].get(`previous`);
-      if(globals[channel.id].get(`loop`) === 0){
-        queue[0].started = 0;
-        previous.push(queue[0]);
-        globals[channel.id].set(`previous`, previous);
-        queue.shift();
-        if(queue.length === 0){
-          resolve();
-          return this.stop(channel);
-        }
-        queue[0].started = (new Date()).getTime();
-        player.play(queue[0].url, {
-          quality: queue[0].quality,
-          autoleave: false,
-          selfDeaf: true,
-          selfMute: false,
-          audiotype: queue[0].audiotype
-        }).then(() => {
-          resolve();
-        }).catch(err => {
-          reject(err);
+    }
+    removeFilter(...filters){
+        return new Promise(async (resolve, reject) => {
+            let _f = globals[this.channel.id].get(`filters`);
+            for(let i = 0; i < filters.length; i++){
+                let filterIndex = _f.indexOf(filters[i]);
+                if(Array.isArray(filters[i])){
+                    for(let z = 0; z < filters[i].length; z++){
+                        filterIndex = _f.indexOf(filters[i][z]);
+                        if(typeof filters[i][z] === 'string' && filterIndex >= 0){
+                            _f.splice(filterIndex, 1);
+                        }
+                    }
+                } else if(typeof filters[i] === 'string' && filterIndex >= 0){
+                    _f.splice(filterIndex, 1);
+                }
+            }
+            globals[this.channel.id].set(`filters`, _f);
+
+            if(this.playing === false) resolve();
+            else {
+                let currentStream = globals[this.channel.id].get(`stream`);
+                let currentOptions = globals[this.channel.id].get(`currentOptions`);
+
+                this.play(currentStream, currentOptions).then(() => resolve()).catch(reject);
+            }
         });
-      } else if(globals[channel.id].get(`loop`) === 2){
-        queue[0].started = 0;
-        queue[0].pauses = [];
-        queue[0].paused = false;
-        previous.push(queue[0]);
-        globals[channel.id].set(`previous`, previous);
-        queue.push(queue[0]);
-        queue.shift();
-        queue[0].started = (new Date()).getTime();
-        player.play(queue[0].url, {
-          quality: queue[0].quality,
-          autoleave: false,
-          selfDeaf: true,
-          selfMute: false,
-          audiotype: queue[0].audiotype
-        }).then(() => {
-          resolve();
-        }).catch(err => {
-          reject(err);
-        });
-      } else if(globals[channel.id].get(`loop`) === 1){
-        queue[0].started = (new Date()).getTime();
-        player.play(queue[0].url, {
-          quality: queue[0].quality,
-          autoleave: false,
-          selfDeaf: true,
-          selfMute: false,
-          audiotype: queue[0].audiotype
-        }).then(() => {
-          resolve();
-        }).catch(err => {
-          reject(err);
-        });
-      }
-    });
-  };
-  previous(channel){
-    if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
-    if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
-    const queue = globals[channel.id].get(`queue`);
-    const player = globals[channel.id].get(`connection`);
-    return new Promise((resolve, reject) => {
-      const previous = globals[channel.id].get(`previous`);
-      const previousSong = previous.length > 0 ? previous[previous.length - 1] : queue[0];
-      previousSong.started = (new Date()).getTime();
-      previousSong.pauses = [];
-      if(previousSong.loopType === 2){
-        if(previous.length > 0){
-          queue.splice(queue.length - 1, 1);
-          queue.splice(0, 0, previousSong);
-          previous.shift();
-        }
-        globals[channel.id].set(`previous`, previous);
-        globals[channel.id].set(`queue`, queue);
-        globals[channel.id].set(`loop`, 2);
-        player.play(previousSong.url, {
-          quality: previousSong.quality,
-          autoleave: false,
-          selfDeaf: true,
-          selfMute: false,
-          audiotype: previousSong.audiotype
-        }).then(() => {
-          resolve();
-        }).catch(reject);
-      } else if(previousSong.loopType === 1){
-        if(previous.length > 0){
-          queue.splice(0, 0, previousSong);
-          previous.shift();
-        }
-        globals[channel.id].set(`previous`, previous);
-        globals[channel.id].set(`queue`, queue);
-        globals[channel.id].set(`loop`, 1);
-        player.play(previousSong.url, {
-          quality: previousSong.quality,
-          autoleave: false,
-          selfDeaf: true,
-          selfMute: false,
-          audiotype: previousSong.audiotype
-        }).then(() => {
-          resolve();
-        }).catch(reject);
-      } else if(previousSong.loopType === 0){
-        if(previous.length > 0){
-          queue.splice(0, 0, previousSong);
-          previous.shift();
-        }
-        globals[channel.id].set(`previous`, previous);
-        globals[channel.id].set(`queue`, queue);
-        globals[channel.id].set(`loop`, 0);
-        player.play(previousSong.url, {
-          quality: previousSong.quality,
-          autoleave: false,
-          selfDeaf: true,
-          selfMute: false,
-          audiotype: previousSong.audiotype
-        }).then(() => {
-          resolve();
-        }).catch(reject);
-      }
-    });
-  };
-  pause(channel){
-    if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
-    if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
-    const player = globals[channel.id].get(`connection`);
-    const queue = globals[channel.id].get(`queue`);
-    if(!queue[0].paused){
-      queue[0].paused = true;
-      queue[0].pauses.push({started: (new Date()).getTime(), ended: null});
-      globals[channel.id].set(`queue`, queue);
     }
-    player.pause();
-  };
-  resume(channel){
-    if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
-    if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
-    const player = globals[channel.id].get(`connection`);
-    const queue = globals[channel.id].get(`queue`);
-    if(queue[0].paused){
-      queue[0].paused = false;
-      queue[0].pauses[0].ended = (new Date()).getTime();
-      globals[channel.id].set(`queue`, queue);
+    getFilters(){
+        return [...(globals[this.channel.id].get(`filters`) ?? [])];
     }
-    player.resume();
-  }
-  queue(channel){
-    if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
-    if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
-    const queue = globals[channel.id].get(`queue`);
-    const audioqueue = queue.reduce((total, item) => {
-      var title = item.info ? item.info.title : null;
-      total.push({url: item.url, title: title});
-      return total;
-    }, []);
-    return audioqueue;
-  };
-  clearqueue(channel){
-    if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
-    if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
-    globals[channel.id].set(`queue`, []);
-  };
-  deletequeue(channel, stream){
-    if(!channel || !stream) throw new Error(constants.ERRORMESSAGES.AM_REQUIRED_PARAMETERS);
-    if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
-    return new Promise((resolve, reject) => {
-      const queue = globals[channel.id].get(`queue`);
-      const song = queue.filter(song => song.url === stream);
-      if(!song[0]) return reject(constants.ERRORMESSAGES.DELETE_QUEUE_SONG_NOT_EXISTS);
-      const index = queue.indexOf(song[0]);
-      if(index >= 0){
-        queue.splice(index, 1);
-        resolve();
-        this.emit(`queue_remove`, stream);
-      } else return reject(constants.ERRORMESSAGES.DELETE_QUEUE_SONG_NOT_EXISTS);
-    });
-  };
-  shuffle(channel){
-    if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
-    if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
-    var queue = [...globals[channel.id].get(`queue`)];
-    const firstSong = queue[0];
-    queue.shift();
-    for(var i = 0; i < queue.length; i++){
-      const queueVal = queue[i];
-      const randIndex = Math.round(Math.random() * (queue.length - 1));
-      const replaceVal = queue[randIndex];
-      queue[i] = replaceVal;
-      queue[randIndex] = queueVal;
+    getStream(){
+        return globals[this.channel.id].get(`playable_stream`);
     }
-    queue = [firstSong, ...queue]
-    globals[channel.id].set(`queue`, queue);
-  }
-  destroy(){
-    for(const global in globals){
-      globals[global].get(`connection`).destroy();
-    }
-    globals = {};
-    this.emit(`destroy`);
-  };
-  volume(channel, volume){
-    if(this.ffmpeg === false) return false;
-    if(!channel || !volume) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETERS_VOLUME);
-    if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
-    if(isNaN(volume)) throw new Error(constants.ERRORMESSAGES.AM_NAN_VOLUME);
-    if(volume < 1 || volume > 10) throw new Error(constants.ERRORMESSAGES.AM_INVALID_VOLUME);
-    const player = globals[channel.id].get(`connection`);
-    globals[channel.id].set(`volume`, volume / 10);
-    player.volume(`${volume}/10`);
-  };
-  getCurrentSong(channel){
-    if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
-    if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
-    var queue = [...globals[channel.id].get(`queue`)];
-    const firstSong = queue[0];
-    return {
-      url: firstSong.url,
-      title: firstSong.info ? firstSong.info.title : null,
-      started: firstSong.started,
-      info: firstSong.info ?? null,
-      paused: firstSong.paused,
-      pauses: [...firstSong.pauses],
-      loop: globals[channel.id].get(`loop`)
-    };
-  };
-  getVolume(channel){
-    if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
-    if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
-    return globals[channel.id].get(`volume`) * 10;
-  };
-  setFilter(channel, ...filters){
-    return new Promise((resolve, reject) => {
-      if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
-      if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
-      const player = globals[channel.id].get(`connection`);
-      player.setFilter(...filters).then(() => {
-        const queue = globals[channel.id].get(`queue`);
-        queue[0].started = (new Date()).getTime();
-        queue[0].paused = false;
-        queue[0].pauses = [];
-        globals[channel.id].set(`queue`, queue);
-        resolve();
-      }).catch(reject);
-    });
-  }
-  removeFilter(channel, ...filters){
-    return new Promise((resolve, reject) => {
-      if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
-      if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
-      const player = globals[channel.id].get(`connection`);
-      player.removeFilter(...filters).then(() => {
-        const queue = globals[channel.id].get(`queue`);
-        queue[0].started = (new Date()).getTime();
-        queue[0].paused = false;
-        queue[0].pauses = [];
-        globals[channel.id].set(`queue`, queue);
-        resolve();
-      }).catch(reject);
-    });
-  }
-  getFilters(channel){
-    if(!channel) throw new Error(constants.ERRORMESSAGES.REQUIRED_PARAMETER_CHANNEL);
-    if(!globals[channel.id]) throw new Error(constants.ERRORMESSAGES.PLAY_FUNCTION_NOT_CALLED);
-    const player = globals[channel.id].get(`connection`);
-    return player.getFilters();
-  }
+    paused = false;
 };
 
-module.exports = {AudioManager};
+module.exports = {Player};
+
+/**
+ * Emitted when the audio starts playing
+ * @event Player#play
+ * @param {string} url The url of the stream
+ */
+
+/**
+ * Emitted when the audio ended or stopped
+ * @event Player#stop
+ * @param {string} url The url of the stream that ended
+ */
+
+/**
+ * Emitted when the bot gets disconnected of the voice channel
+ * @event Player#disconnect
+ * @param {string} channelid The id of the channel where the bot got disconnected of
+ */
+
+/**
+ * Emitted when the player gets destroyed
+ * @event Player#destroy
+ * @param {string} channelid The id of the channel where the connection of the bot got destroyed
+ */
